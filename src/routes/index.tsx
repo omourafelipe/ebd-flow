@@ -45,7 +45,7 @@ function Index() {
             </div>
           </div>
           <Link
-            to="/"
+            to="/dashboard"
             className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-soft transition-colors hover:bg-primary/90"
           >
             Entrar
@@ -71,12 +71,18 @@ function Index() {
             em poucos toques.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <button className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground shadow-soft transition-colors hover:bg-primary/90">
+            <Link
+              to="/dashboard"
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground shadow-soft transition-colors hover:bg-primary/90"
+            >
               Começar agora
-            </button>
-            <button className="inline-flex h-11 items-center justify-center rounded-xl border border-border bg-background px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
+            </Link>
+            <Link
+              to="/dashboard"
+              className="inline-flex h-11 items-center justify-center rounded-xl border border-border bg-background px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+            >
               Conhecer o sistema
-            </button>
+            </Link>
           </div>
         </div>
       </section>
