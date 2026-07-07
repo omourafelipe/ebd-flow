@@ -122,14 +122,16 @@ function Dashboard() {
 
   const alerts = getAlerts();
 
-  // Data prep for class distribution chart
+  // Data prep for class distribution data
   const getClassDistributionData = () => {
     return store.classes
       .filter((c) => c.status === "ATIVA")
       .map((c) => {
         const count = store.alunos.filter((a) => a.classe_id === c.id).length;
+        // Truncate name before any kind of dash (em-dash, en-dash, hyphen)
+        const name = c.nome.split(/[—–-]/)[0].trim();
         return {
-          name: c.nome.split("—")[0].trim(), // Short name
+          name,
           Alunos: count,
         };
       });
@@ -247,7 +249,7 @@ function Dashboard() {
             variant="outline"
             className="w-full border-slate-100 hover:bg-slate-50 text-slate-700 rounded-xl py-5 h-auto text-xs font-semibold flex flex-col items-center gap-1.5 cursor-pointer"
           >
-            <Link to="/alunos" search={{ novo: true }}>
+            <Link to="/alunos" search={{ novo: "true" }}>
               <UserPlus className="h-4.5 w-4.5 text-slate-400" />
               <span>Novo Aluno</span>
             </Link>
@@ -258,7 +260,7 @@ function Dashboard() {
             variant="outline"
             className="w-full border-slate-100 hover:bg-slate-50 text-slate-700 rounded-xl py-5 h-auto text-xs font-semibold flex flex-col items-center gap-1.5 cursor-pointer"
           >
-            <Link to="/classes" search={{ nova: true }}>
+            <Link to="/classes" search={{ nova: "true" }}>
               <Plus className="h-4.5 w-4.5 text-slate-400" />
               <span>Nova Classe</span>
             </Link>
