@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase, isSupabaseConfigured } from "./supabase";
 
 export interface Classe {
   id: string;
@@ -420,6 +421,147 @@ const DEFAULT_DATA: EbdStoreData = {
   ],
 };
 
+function generateUUID() {
+  try {
+    if (typeof window !== "undefined" && window.crypto && window.crypto.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+  } catch {}
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export async function syncFromSupabase() {
+  if (!isSupabaseConfigured || !supabase) return;
+  const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+  if (isDemo) return;
+
+  try {
+    const { data: config } = await supabase.from("configuracoes").select("*").maybeSingle();
+    const { data: classes } = await supabase.from("classes").select("*");
+    const { data: alunos } = await supabase.from("alunos").select("*");
+    const { data: courses } = await supabase.from("courses").select("*");
+    const { data: enrollments } = await supabase.from("curso_aluno").select("*");
+    const { data: aulas } = await supabase.from("aulas").select("*");
+    const { data: presencas } = await supabase.from("presencas").select("*");
+    const { data: historicos } = await supabase.from("historico_classes").select("*");
+
+    const store = getEbdStore();
+
+    if (config) {
+      store.configuracoes = {
+        id: config.id,
+        nome_igreja: config.nome_igreja,
+        ano_letivo: config.ano_letivo,
+        logo_url: config.logo_url,
+        tema: config.tema,
+      };
+    }
+
+    if (classes) {
+      store.classes = classes.map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        departamento: c.departamento,
+        faixa_etaria: c.faixa_etaria,
+        professor: c.professor,
+        professor_auxiliar: c.professor_auxiliar,
+        sala: c.sala,
+        cor: c.cor,
+        status: c.status,
+        observacoes: c.observacoes,
+      }));
+    }
+
+    if (alunos) {
+      store.alunos = alunos.map((a) => ({
+        id: a.id,
+        classe_id: a.classe_id,
+        nome: a.nome,
+        sexo: a.sexo,
+        telefone: a.telefone,
+        email: a.email,
+        data_nascimento: a.data_nascimento,
+        data_ingresso: a.data_ingresso,
+        status: a.status,
+        observacoes: a.observacoes,
+      }));
+    }
+
+    if (courses) {
+      store.cursos = courses.map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        descricao: c.descricao,
+        professor: c.professor,
+        carga_horaria: c.carga_horaria,
+        data_inicio: c.data_inicio,
+        data_fim: c.data_fim,
+        status: c.status,
+      }));
+    }
+
+    if (enrollments) {
+      store.curso_aluno = enrollments.map((e) => ({
+        id: e.id,
+        curso_id: e.curso_id,
+        aluno_id: e.aluno_id,
+        data_matricula: e.data_matricula,
+      }));
+    }
+
+    if (aulas) {
+      const presencasMap: Record<string, Record<string, Presenca>> = {};
+      aulas.forEach((a) => {
+        presencasMap[a.id] = {};
+      });
+
+      if (presencas) {
+        presencas.forEach((p) => {
+          if (presencasMap[p.aula_id]) {
+            presencasMap[p.aula_id][p.aluno_id] = {
+              presente: p.presente,
+              trouxe_biblia: p.trouxe_biblia,
+              observacoes: p.observacoes,
+            };
+          }
+        });
+      }
+
+      store.aulas = aulas.map((a) => ({
+        id: a.id,
+        classe_id: a.classe_id,
+        data_aula: a.data_aula,
+        tema: a.tema,
+        numero_licao: a.numero_licao,
+        professor: a.professor,
+        professor_substituto: a.professor_substituto,
+        observacoes: a.observacoes,
+        presencas: presencasMap[a.id] || {},
+      }));
+    }
+
+    if (historicos) {
+      store.historico_classes = historicos.map((h) => ({
+        id: h.id,
+        aluno_id: h.aluno_id,
+        classe_origem_id: h.classe_origem_id,
+        classe_destino_id: h.classe_destino_id,
+        tipo: h.tipo,
+        motivo: h.motivo,
+        data_evento: h.data_evento,
+      }));
+    }
+
+    saveEbdStore(store);
+  } catch (err) {
+    console.error("Failed to sync from Supabase", err);
+  }
+}
+
 const STORAGE_KEY = "ebd_flow_data_v2";
 
 const listeners = new Set<() => void>();
@@ -496,7 +638,7 @@ export function useEbdStore() {
 // ALUNOS
 export function addAluno(aluno: Omit<Aluno, "id">) {
   const store = getEbdStore();
-  const id = "a_" + Date.now();
+  const id = generateUUID();
   const newAluno: Aluno = {
     ...aluno,
     id,
@@ -507,7 +649,7 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
 
   // Trigger: Insert history for INGRESSO
   const newHistory: HistoricoClasse = {
-    id: "h_" + Date.now(),
+    id: generateUUID(),
     aluno_id: id,
     classe_origem_id: null,
     classe_destino_id: aluno.classe_id,
@@ -518,6 +660,28 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
   store.historico_classes.push(newHistory);
 
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("alunos").insert({
+        id,
+        classe_id: aluno.classe_id,
+        nome: aluno.nome,
+        sexo: aluno.sexo,
+        telefone: aluno.telefone,
+        email: aluno.email,
+        data_nascimento: aluno.data_nascimento,
+        data_ingresso: newAluno.data_ingresso,
+        status: aluno.status,
+        observacoes: aluno.observacoes,
+      }).then(({ error }) => {
+        if (error) console.error("Error syncing addAluno:", error);
+      });
+    }
+  }
+
   return newAluno;
 }
 
@@ -536,7 +700,7 @@ export function updateAluno(aluno: Aluno) {
     const isPromo = oldClass?.departamento !== newClass?.departamento;
 
     const newHistory: HistoricoClasse = {
-      id: "h_" + Date.now() + "_promo",
+      id: generateUUID(),
       aluno_id: aluno.id,
       classe_origem_id: oldAluno.classe_id || null,
       classe_destino_id: aluno.classe_id,
@@ -562,7 +726,7 @@ export function updateAluno(aluno: Aluno) {
 
     if (type) {
       const newHistory: HistoricoClasse = {
-        id: "h_" + Date.now() + "_status",
+        id: generateUUID(),
         aluno_id: aluno.id,
         classe_origem_id: aluno.classe_id,
         classe_destino_id: aluno.classe_id,
@@ -575,6 +739,25 @@ export function updateAluno(aluno: Aluno) {
   }
 
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("alunos").update({
+        classe_id: aluno.classe_id,
+        nome: aluno.nome,
+        sexo: aluno.sexo,
+        telefone: aluno.telefone,
+        email: aluno.email,
+        data_nascimento: aluno.data_nascimento,
+        status: aluno.status,
+        observacoes: aluno.observacoes,
+      }).eq("id", aluno.id).then(({ error }) => {
+        if (error) console.error("Error syncing updateAluno:", error);
+      });
+    }
+  }
 }
 
 export function deleteAluno(id: string) {
@@ -594,17 +777,50 @@ export function deleteAluno(id: string) {
   store.alunos = store.alunos.filter((a) => a.id !== id);
 
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("alunos").delete().eq("id", id).then(({ error }) => {
+        if (error) console.error("Error syncing deleteAluno:", error);
+      });
+    }
+  }
 }
 
 // CLASSES
 export function addClasse(classe: Omit<Classe, "id">) {
   const store = getEbdStore();
+  const id = generateUUID();
   const newClasse: Classe = {
     ...classe,
-    id: "c_" + Date.now(),
+    id,
   };
   store.classes.push(newClasse);
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("classes").insert({
+        id,
+        nome: classe.nome,
+        departamento: classe.departamento,
+        faixa_etaria: classe.faixa_etaria,
+        professor: classe.professor,
+        professor_auxiliar: classe.professor_auxiliar,
+        sala: classe.sala,
+        cor: classe.cor,
+        status: classe.status,
+        observacoes: classe.observacoes,
+      }).then(({ error }) => {
+        if (error) console.error("Error syncing addClasse:", error);
+      });
+    }
+  }
+
   return newClasse;
 }
 
@@ -612,6 +828,26 @@ export function updateClasse(classe: Classe) {
   const store = getEbdStore();
   store.classes = store.classes.map((c) => (c.id === classe.id ? classe : c));
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("classes").update({
+        nome: classe.nome,
+        departamento: classe.departamento,
+        faixa_etaria: classe.faixa_etaria,
+        professor: classe.professor,
+        professor_auxiliar: classe.professor_auxiliar,
+        sala: classe.sala,
+        cor: classe.cor,
+        status: classe.status,
+        observacoes: classe.observacoes,
+      }).eq("id", classe.id).then(({ error }) => {
+        if (error) console.error("Error syncing updateClasse:", error);
+      });
+    }
+  }
 }
 
 export function deleteClasse(id: string) {
@@ -631,17 +867,48 @@ export function deleteClasse(id: string) {
 
   store.classes = store.classes.filter((c) => c.id !== id);
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("classes").delete().eq("id", id).then(({ error }) => {
+        if (error) console.error("Error syncing deleteClasse:", error);
+      });
+    }
+  }
 }
 
 // CURSOS
 export function addCurso(curso: Omit<Curso, "id">) {
   const store = getEbdStore();
+  const id = generateUUID();
   const newCurso: Curso = {
     ...curso,
-    id: "cu_" + Date.now(),
+    id,
   };
   store.cursos.push(newCurso);
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("courses").insert({
+        id,
+        nome: curso.nome,
+        descricao: curso.descricao,
+        professor: curso.professor,
+        carga_horaria: curso.carga_horaria,
+        data_inicio: curso.data_inicio,
+        data_fim: curso.data_fim,
+        status: curso.status,
+      }).then(({ error }) => {
+        if (error) console.error("Error syncing addCurso:", error);
+      });
+    }
+  }
+
   return newCurso;
 }
 
@@ -649,6 +916,24 @@ export function updateCurso(curso: Curso) {
   const store = getEbdStore();
   store.cursos = store.cursos.map((c) => (c.id === curso.id ? curso : c));
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("courses").update({
+        nome: curso.nome,
+        descricao: curso.descricao,
+        professor: curso.professor,
+        carga_horaria: curso.carga_horaria,
+        data_inicio: curso.data_inicio,
+        data_fim: curso.data_fim,
+        status: curso.status,
+      }).eq("id", curso.id).then(({ error }) => {
+        if (error) console.error("Error syncing updateCurso:", error);
+      });
+    }
+  }
 }
 
 export function deleteCurso(id: string) {
@@ -662,6 +947,16 @@ export function deleteCurso(id: string) {
 
   store.cursos = store.cursos.filter((c) => c.id !== id);
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("courses").delete().eq("id", id).then(({ error }) => {
+        if (error) console.error("Error syncing deleteCurso:", error);
+      });
+    }
+  }
 }
 
 // CURSO MATRICULAS (N:N)
@@ -674,8 +969,9 @@ export function matricularAlunoCurso(cursoId: string, alunoId: string) {
     throw new Error("Aluno já matriculado neste curso.");
   }
 
+  const id = generateUUID();
   const newMatricula: CursoAluno = {
-    id: "ca_" + Date.now(),
+    id,
     curso_id: cursoId,
     aluno_id: alunoId,
     data_matricula: new Date().toISOString().split("T")[0],
@@ -683,6 +979,22 @@ export function matricularAlunoCurso(cursoId: string, alunoId: string) {
 
   store.curso_aluno.push(newMatricula);
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("curso_aluno").insert({
+        id,
+        curso_id: cursoId,
+        aluno_id: alunoId,
+        data_matricula: newMatricula.data_matricula,
+      }).then(({ error }) => {
+        if (error) console.error("Error syncing matricularAlunoCurso:", error);
+      });
+    }
+  }
+
   return newMatricula;
 }
 
@@ -690,6 +1002,16 @@ export function desmatricularAlunoCurso(cursoId: string, alunoId: string) {
   const store = getEbdStore();
   store.curso_aluno = store.curso_aluno.filter((ca) => !(ca.curso_id === cursoId && ca.aluno_id === alunoId));
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("curso_aluno").delete().eq("curso_id", cursoId).eq("aluno_id", alunoId).then(({ error }) => {
+        if (error) console.error("Error syncing desmatricularAlunoCurso:", error);
+      });
+    }
+  }
 }
 
 // AULAS AND PRESENCES
@@ -702,9 +1024,10 @@ export function addAula(aula: Omit<Aula, "id">) {
     throw new Error("Esta classe já possui uma aula registrada para esta data.");
   }
 
+  const id = generateUUID();
   const newAula: Aula = {
     ...aula,
-    id: "au_" + Date.now(),
+    id,
   };
 
   // Rule checks: trouxe_biblia can only be true if presente is true
@@ -717,6 +1040,42 @@ export function addAula(aula: Omit<Aula, "id">) {
 
   store.aulas.push(newAula);
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("aulas").insert({
+        id,
+        classe_id: aula.classe_id,
+        data_aula: aula.data_aula,
+        tema: aula.tema,
+        numero_licao: aula.numero_licao,
+        professor: aula.professor,
+        professor_substituto: aula.professor_substituto,
+        observacoes: aula.observacoes,
+      }).then(({ error }) => {
+        if (error) {
+          console.error("Error syncing addAula:", error);
+          return;
+        }
+        // Sync presences
+        const presencesToInsert = Object.entries(newAula.presencas).map(([alunoId, p]) => ({
+          aula_id: id,
+          aluno_id: alunoId,
+          presente: p.presente,
+          trouxe_biblia: p.trouxe_biblia,
+          observacoes: p.observacoes || null,
+        }));
+        if (presencesToInsert.length > 0) {
+          supabase.from("presencas").insert(presencesToInsert).then(({ error: pError }) => {
+            if (pError) console.error("Error syncing presences to Supabase:", pError);
+          });
+        }
+      });
+    }
+  }
+
   return newAula;
 }
 
@@ -724,6 +1083,16 @@ export function deleteAula(id: string) {
   const store = getEbdStore();
   store.aulas = store.aulas.filter((a) => a.id !== id);
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("aulas").delete().eq("id", id).then(({ error }) => {
+        if (error) console.error("Error syncing deleteAula:", error);
+      });
+    }
+  }
 }
 
 // CONFIGURACOES
@@ -732,4 +1101,17 @@ export function updateConfiguracoes(igrejaNome: string, anoLetivo: number = 2026
   store.configuracoes.nome_igreja = igrejaNome;
   store.configuracoes.ano_letivo = anoLetivo;
   saveEbdStore(store);
+
+  // Sync to Supabase
+  if (isSupabaseConfigured && supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("configuracoes").update({
+        nome_igreja: igrejaNome,
+        ano_letivo: anoLetivo,
+      }).eq("id", "00000000-0000-0000-0000-000000000001").then(({ error }) => {
+        if (error) console.error("Error syncing updateConfiguracoes:", error);
+      });
+    }
+  }
 }

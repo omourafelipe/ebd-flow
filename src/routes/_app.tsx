@@ -1,5 +1,7 @@
-import { createFileRoute, Outlet, Link, useLocation } from "@tanstack/react-router";
-import { useEbdStore } from "@/lib/store";
+import { createFileRoute, Outlet, Link, useLocation, redirect, useNavigate } from "@tanstack/react-router";
+import { useEbdStore, syncFromSupabase } from "@/lib/store";
+import { useState, useEffect } from "react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   LayoutDashboard,
   BookOpen,
@@ -9,10 +11,23 @@ import {
   BarChart3,
   Settings,
   Menu,
+  LogOut,
 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app")({
+  beforeLoad: async () => {
+    if (isSupabaseConfigured && supabase) {
+      const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+      if (!isDemo) {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) {
+          throw redirect({ to: "/login" });
+        }
+      }
+    }
+  },
   component: AppLayout,
 });
 
@@ -29,6 +44,68 @@ const menuItems = [
 function AppLayout() {
   const store = useEbdStore();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const [userName, setUserName] = useState("Administrador");
+  const [userRole, setUserRole] = useState("ADMIN");
+
+  useEffect(() => {
+    async function loadProfile() {
+      // Sync from database first
+      await syncFromSupabase();
+
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const { data: profile } = await supabase.from("profiles")
+              .select("nome, role")
+              .eq("id", session.user.id)
+              .maybeSingle();
+            
+            if (profile) {
+              setUserName(profile.nome);
+              setUserRole(profile.role);
+            } else {
+              setUserName(session.user.user_metadata?.nome || session.user.user_metadata?.name || "Usuário");
+              setUserRole(session.user.user_metadata?.role || "STUDENT");
+            }
+          }
+        } catch (e) {
+          console.error("Error loading profile", e);
+        }
+      } else {
+        setUserName("Administrador");
+        setUserRole("ADMIN");
+      }
+    }
+    loadProfile();
+  }, []);
+
+  const handleLogout = async () => {
+    if (isSupabaseConfigured && supabase) {
+      await supabase.auth.signOut();
+    }
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("ebd_demo_mode");
+    }
+    toast.success("Você saiu do sistema.");
+    navigate({ to: "/login" });
+  };
+
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase();
+  };
+
+  const getRoleLabel = (role: string) => {
+    if (role === "ADMIN") return "Administrador";
+    if (role === "TEACHER") return "Professor";
+    return "Aluno";
+  };
 
   // Get current formatted date in Portuguese
   const getFormattedDate = () => {
@@ -92,14 +169,23 @@ function AppLayout() {
         </nav>
 
         {/* Sidebar Footer */}
-        <div className="p-4 border-t border-primary/10 bg-primary/20 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-primary-foreground/20 text-white flex items-center justify-center font-semibold text-sm">
-            ADM
+        <div className="p-4 border-t border-primary/10 bg-primary/20 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-9 w-9 rounded-full bg-primary-foreground/20 text-white flex items-center justify-center font-semibold text-sm flex-shrink-0">
+              {getInitials(userName)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-white truncate">{userName}</p>
+              <p className="text-[10px] text-primary-foreground/75 truncate">{getRoleLabel(userRole)}</p>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-white truncate">Administrador</p>
-            <p className="text-[10px] text-primary-foreground/75 truncate">{store.configuracoes.nome_igreja}</p>
-          </div>
+          <button
+            onClick={handleLogout}
+            title="Sair"
+            className="text-primary-foreground/60 hover:text-white p-1.5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer flex-shrink-0"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </aside>
 
@@ -125,8 +211,15 @@ function AppLayout() {
               {getFormattedDate()}
             </span>
             <div className="h-8 w-8 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-xs border border-slate-200">
-              A
+              {getInitials(userName)}
             </div>
+            <button
+              onClick={handleLogout}
+              title="Sair"
+              className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
         </header>
 
