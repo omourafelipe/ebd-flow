@@ -1189,7 +1189,7 @@ export function addAula(aula: Omit<Aula, "id">) {
           observacoes: p.observacoes || null,
         }));
         if (presencesToInsert.length > 0) {
-          supabase.from("presencas").insert(presencesToInsert).then(({ error: pError }) => {
+          supabase!.from("presencas").insert(presencesToInsert).then(({ error: pError }) => {
             if (pError) console.error("Error syncing presences to Supabase:", pError);
           });
         }
