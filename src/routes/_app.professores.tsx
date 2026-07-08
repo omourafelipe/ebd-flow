@@ -363,7 +363,7 @@ function ProfessoresPage() {
           <p className="text-xs text-slate-500 font-medium">Controle de professores e equipe.</p>
         </div>
         {canManageStudent() && (
-          <Button onClick={handleOpenCreate} className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft hidden sm:flex">
+          <Button onClick={handleOpenCreate} className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft">
             <Plus className="h-4 w-4" />
             <span>Cadastrar Professor</span>
           </Button>

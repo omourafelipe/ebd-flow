@@ -22,9 +22,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  ArrowUpDown,
   BookMarked,
   Search,
+  Link,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -464,7 +464,7 @@ function ClassesPage() {
         {canManageClass() && (
           <Button
             onClick={handleOpenCreate}
-            className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft hidden sm:flex"
+            className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft"
           >
             <Plus className="h-4 w-4" />
             <span>Nova Classe</span>
@@ -734,6 +734,17 @@ function ClassesPage() {
                                 >
                                   <Trash2 className="h-3.5 w-3.5 text-red-400" />
                                   Excluir
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    const url = `${window.location.origin}/inscricao/${c.id}`;
+                                    navigator.clipboard.writeText(url);
+                                    toast.success("Link de inscrição copiado!");
+                                  }}
+                                  className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  <Link className="h-3.5 w-3.5 text-blue-500" />
+                                  Link de Inscrição
                                 </DropdownMenuItem>
                               </>
                             )}

@@ -479,7 +479,7 @@ function AlunosPage() {
         {canManageStudent() && (
           <Button
             onClick={handleOpenCreate}
-            className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft hidden sm:flex"
+            className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft"
           >
             <Plus className="h-4 w-4" />
             <span>Cadastrar Aluno</span>
