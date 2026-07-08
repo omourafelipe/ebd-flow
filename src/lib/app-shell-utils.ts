@@ -2,10 +2,11 @@ import {
   LayoutDashboard,
   BookOpen,
   Users,
+  Calendar,
   GraduationCap,
-  CalendarCheck,
   BarChart3,
   Settings,
+  UserCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -19,8 +20,11 @@ export interface MenuItem {
 export const menuItems: MenuItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/classes", label: "Classes", icon: BookOpen },
-  { to: "/alunos", label: "Pessoas", icon: Users },
+  { to: "/alunos", label: "Alunos", icon: Users },
+  { to: "/professores", label: "Professores", icon: UserCheck },
+  { to: "/aulas", label: "Aulas & Chamadas", icon: Calendar },
   { to: "/cursos", label: "Cursos", icon: GraduationCap },
+  { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 

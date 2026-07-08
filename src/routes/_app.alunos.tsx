@@ -76,12 +76,12 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/_app/alunos")({
   validateSearch: (search) => searchSchema.parse(search),
-  component: PessoasPage,
+  component: AlunosPage,
 });
 
-const ROLES_OPTIONS = ["Aluno", "Professor", "Professor Auxiliar", "Visitante", "Administrador"];
+const ROLES_OPTIONS = ["Aluno", "Visitante"];
 
-function PessoasPage() {
+function AlunosPage() {
   const store = useEbdStore();
   const search = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
@@ -356,6 +356,10 @@ function PessoasPage() {
 
   // Filters logic
   const filteredPessoas = store.alunos.filter((a) => {
+    // Only show students or visitors
+    const isStudentOrVisitor = a.funcoes?.includes("Aluno") || a.funcoes?.includes("Visitante") || (!a.funcoes?.includes("Professor") && !a.funcoes?.includes("Professor Auxiliar") && !a.funcoes?.includes("Administrador"));
+    if (!isStudentOrVisitor) return false;
+
     const matchSearch =
       a.nome.toLowerCase().includes(searchText.toLowerCase()) ||
       (a.email && a.email.toLowerCase().includes(searchText.toLowerCase())) ||
@@ -468,9 +472,9 @@ function PessoasPage() {
         <div>
           <h3 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
             <Users className="h-5.5 w-5.5 text-primary" />
-            Pessoas
+            Alunos
           </h3>
-          <p className="text-xs text-slate-500 font-medium">Controle de matrículas, professores, auxiliares e visitantes.</p>
+          <p className="text-xs text-slate-500 font-medium">Controle de matrículas de alunos e visitantes.</p>
         </div>
         {canManageStudent() && (
           <Button
@@ -478,7 +482,7 @@ function PessoasPage() {
             className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft hidden sm:flex"
           >
             <Plus className="h-4 w-4" />
-            <span>Cadastrar Pessoa</span>
+            <span>Cadastrar Aluno</span>
           </Button>
         )}
       </div>
@@ -651,9 +655,9 @@ function PessoasPage() {
           <div className="h-14 w-14 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center mb-4">
             <Users className="h-6 w-6" />
           </div>
-          <h4 className="text-sm font-bold text-slate-800">Nenhuma pessoa cadastrada</h4>
+          <h4 className="text-sm font-bold text-slate-800">Nenhum aluno cadastrado</h4>
           <p className="text-xs text-slate-400 max-w-xs mt-1.5 leading-relaxed font-medium">
-            Registre participantes e atribua funções (alunos, professores, administradores).
+            Registre alunos ou visitantes para suas classes.
           </p>
           {canManageStudent() && (
             <Button
