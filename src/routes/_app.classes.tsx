@@ -104,6 +104,8 @@ function ClassesPage() {
   const [faixaEtaria, setFaixaEtaria] = useState("");
   const [professor, setProfessor] = useState("");
   const [professorAuxiliar, setProfessorAuxiliar] = useState("");
+  const [professorId, setProfessorId] = useState("");
+  const [professorAuxiliarId, setProfessorAuxiliarId] = useState("");
   const [sala, setSala] = useState("");
   const [cor, setCor] = useState("emerald");
   const [status, setStatus] = useState<"ATIVA" | "INATIVA">("ATIVA");
@@ -179,6 +181,8 @@ function ClassesPage() {
     setFaixaEtaria("");
     setProfessor("");
     setProfessorAuxiliar("");
+    setProfessorId("");
+    setProfessorAuxiliarId("");
     setSala("");
     setCor("emerald");
     setStatus("ATIVA");
@@ -194,6 +198,8 @@ function ClassesPage() {
     setFaixaEtaria(c.faixa_etaria || "");
     setProfessor(c.professor);
     setProfessorAuxiliar(c.professor_auxiliar || "");
+    setProfessorId(c.professor_id || "");
+    setProfessorAuxiliarId(c.professor_auxiliar_id || "");
     setSala(c.sala || "");
     setCor(c.cor || "emerald");
     setStatus(c.status);
@@ -219,6 +225,8 @@ function ClassesPage() {
     setFaixaEtaria(c.faixa_etaria || "");
     setProfessor(c.professor);
     setProfessorAuxiliar(c.professor_auxiliar || "");
+    setProfessorId(c.professor_id || "");
+    setProfessorAuxiliarId(c.professor_auxiliar_id || "");
     setSala(c.sala || "");
     setCor(c.cor || "emerald");
     setStatus("ATIVA"); // default to ATIVA
@@ -244,7 +252,7 @@ function ClassesPage() {
   const validate = () => {
     const newErrors: Record<string, string> = {};
     if (!nome.trim()) newErrors.nome = "O nome da classe é obrigatório.";
-    if (!professor.trim()) newErrors.professor = "O professor é obrigatório.";
+    if (!professorId) newErrors.professor = "O professor é obrigatório.";
     if (!faixaEtaria.trim()) newErrors.faixaEtaria = "A faixa etária é obrigatória.";
     if (!status) newErrors.status = "O status é obrigatório.";
 
@@ -270,12 +278,17 @@ function ClassesPage() {
     }
 
     try {
+      const selectedProf = store.professores.find((p) => p.id === professorId);
+      const selectedAux = store.professores.find((p) => p.id === professorAuxiliarId);
+
       const payload = {
         nome: nome.trim(),
         departamento: departamento.trim() || null,
         faixa_etaria: faixaEtaria.trim() || null,
-        professor: professor.trim(),
-        professor_auxiliar: professorAuxiliar.trim() || null,
+        professor: selectedProf ? selectedProf.nome : "",
+        professor_id: professorId || null,
+        professor_auxiliar: selectedAux ? selectedAux.nome : null,
+        professor_auxiliar_id: professorAuxiliarId || null,
         sala: sala.trim() || null,
         cor,
         status,
@@ -975,15 +988,21 @@ function ClassesPage() {
                 <Label htmlFor="professor" className="text-xs font-semibold text-slate-600">
                   Professor Titular *
                 </Label>
-                <Input
+                <select
                   id="professor"
-                  value={professor}
-                  onChange={(e) => setProfessor(e.target.value)}
-                  placeholder="Nome do professor titular"
-                  className={`rounded-xl border-slate-200 text-xs py-5 ${
-                    errors.professor ? "border-red-400 focus-visible:ring-red-400" : ""
+                  value={professorId}
+                  onChange={(e) => setProfessorId(e.target.value)}
+                  className={`w-full rounded-xl border bg-white text-xs px-3 h-10 font-medium text-slate-700 focus:outline-none ${
+                    errors.professor ? "border-red-400 focus-visible:ring-red-400" : "border-slate-200"
                   }`}
-                />
+                >
+                  <option value="">Selecione um Professor</option>
+                  {store.professores.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}
+                    </option>
+                  ))}
+                </select>
                 {errors.professor && (
                   <p className="text-[10px] text-red-500 font-semibold">{errors.professor}</p>
                 )}
@@ -993,13 +1012,19 @@ function ClassesPage() {
                 <Label htmlFor="professorAuxiliar" className="text-xs font-semibold text-slate-600">
                   Professor Auxiliar
                 </Label>
-                <Input
+                <select
                   id="professorAuxiliar"
-                  value={professorAuxiliar}
-                  onChange={(e) => setProfessorAuxiliar(e.target.value)}
-                  placeholder="Nome do auxiliar (opcional)"
-                  className="rounded-xl border-slate-200 text-xs py-5"
-                />
+                  value={professorAuxiliarId}
+                  onChange={(e) => setProfessorAuxiliarId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-10 font-medium text-slate-700 focus:outline-none"
+                >
+                  <option value="">Nenhum (opcional)</option>
+                  {store.professores.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

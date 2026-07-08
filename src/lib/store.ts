@@ -97,10 +97,22 @@ export interface Configuracoes {
   tema: string;
 }
 
+export interface Professor {
+  id: string;
+  nome: string;
+  telefone: string | null;
+  email: string | null;
+  observacoes: string | null;
+  ativo: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface EbdStoreData {
   configuracoes: Configuracoes;
   classes: Classe[];
   alunos: Aluno[];
+  professores: Professor[];
   cursos: Curso[];
   curso_aluno: CursoAluno[];
   aulas: Aula[];
@@ -135,6 +147,12 @@ const CLASSE_JOVENS = "c2c2c2c2-2222-2222-2222-222222222222";
 const CLASSE_JUNIORES = "c3c3c3c3-3333-3333-3333-333333333333";
 const CLASSE_CASAIS = "c4c4c4c4-4444-4444-4444-444444444444";
 
+const PROF_MARCOS = "p1p1p1p1-1111-1111-1111-111111111111";
+const PROF_ROBERTO = "p2p2p2p2-2222-2222-2222-222222222222";
+const PROF_FELIPE = "p3p3p3p3-3333-3333-3333-333333333333";
+const PROF_ANA = "p4p4p4p4-4444-4444-4444-444444444444";
+const PROF_SANDRA = "p5p5p5p5-5555-5555-5555-555555555555";
+
 const ALUNO_ANDRE = "a1a1a1a1-1111-1111-1111-111111111111";
 const ALUNO_BEATRIZ = "a2a2a2a2-2222-2222-2222-222222222222";
 const ALUNO_GABRIEL = "a3a3a3a3-3333-3333-3333-333333333333";
@@ -164,6 +182,8 @@ const DEFAULT_DATA: EbdStoreData = {
       faixa_etaria: "Acima de 25 anos",
       professor: "Pr. Marcos Silva",
       professor_auxiliar: "Pb. Roberto Lima",
+      professor_id: PROF_MARCOS,
+      professor_auxiliar_id: PROF_ROBERTO,
       sala: "Templo Principal",
       cor: "emerald",
       status: "ATIVA",
@@ -176,6 +196,8 @@ const DEFAULT_DATA: EbdStoreData = {
       faixa_etaria: "15 a 25 anos",
       professor: "Ev. Felipe Souza",
       professor_auxiliar: null,
+      professor_id: PROF_FELIPE,
+      professor_auxiliar_id: null,
       sala: "Sala 03 Anexo",
       cor: "blue",
       status: "ATIVA",
@@ -188,6 +210,8 @@ const DEFAULT_DATA: EbdStoreData = {
       faixa_etaria: "8 a 12 anos",
       professor: "Profa. Ana Costa",
       professor_auxiliar: "Sandra Almeida",
+      professor_id: PROF_ANA,
+      professor_auxiliar_id: PROF_SANDRA,
       sala: "Sala das Crianças",
       cor: "amber",
       status: "ATIVA",
@@ -200,11 +224,57 @@ const DEFAULT_DATA: EbdStoreData = {
       faixa_etaria: "Casados",
       professor: "Pb. Roberto Lima",
       professor_auxiliar: null,
+      professor_id: PROF_ROBERTO,
+      professor_auxiliar_id: null,
       sala: "Sala 02 Anexo",
       cor: "slate",
       status: "INATIVA",
       observacoes: "Classe especial focada na edificação de casamentos e lares.",
     },
+  ],
+  professores: [
+    {
+      id: PROF_MARCOS,
+      nome: "Pr. Marcos Silva",
+      telefone: "(11) 99999-1111",
+      email: "marcos.silva@email.com",
+      observacoes: "Pastor da igreja e professor de teologia.",
+      ativo: true
+    },
+    {
+      id: PROF_ROBERTO,
+      nome: "Pb. Roberto Lima",
+      telefone: "(11) 99999-2222",
+      email: "roberto.lima@email.com",
+      observacoes: "Presbítero e superintendente auxiliar.",
+      ativo: true
+    },
+    {
+      id: PROF_FELIPE,
+      nome: "Ev. Felipe Souza",
+      telefone: "(11) 99999-3333",
+      email: "felipe.souza@email.com",
+      observacoes: "Evangelista e líder de jovens.",
+      ativo: true
+    },
+    {
+      id: PROF_ANA,
+      nome: "Profa. Ana Costa",
+      telefone: "(11) 99999-4444",
+      email: "ana.costa@email.com",
+      observacoes: "Pedagoga e coordenadora do EBD Infantil.",
+      ativo: true
+    },
+    {
+      id: PROF_SANDRA,
+      nome: "Sandra Almeida",
+      telefone: "(11) 99999-5555",
+      email: "sandra.almeida@email.com",
+      observacoes: "Auxiliar da classe de Juniores.",
+      ativo: true
+    }
+  ],
+  alunos: [,
   ],
   alunos: [
     {
@@ -472,6 +542,7 @@ export async function syncFromSupabase() {
     const { data: config } = await supabase.from("configuracoes").select("*").maybeSingle();
     const { data: classes } = await supabase.from("classes").select("*");
     const { data: alunos } = await supabase.from("alunos").select("*");
+    const { data: professores } = await supabase.from("professores").select("*");
     const { data: courses } = await supabase.from("courses").select("*");
     const { data: enrollments } = await supabase.from("curso_aluno").select("*");
     const { data: aulas } = await supabase.from("aulas").select("*");
@@ -509,6 +580,17 @@ export async function syncFromSupabase() {
 
     if (alunos) {
       store.alunos = alunos.map((a) => deserializeAluno(a));
+    }
+
+    if (professores) {
+      store.professores = professores.map((p) => ({
+        id: p.id,
+        nome: p.nome,
+        telefone: p.telefone,
+        email: p.email,
+        observacoes: p.observacoes,
+        ativo: p.ativo,
+      })) as Professor[];
     }
 
     if (courses) {
@@ -645,6 +727,7 @@ export function clearEbdStore() {
     },
     classes: [],
     alunos: [],
+    professores: [],
     cursos: [],
     curso_aluno: [],
     aulas: [],
@@ -890,6 +973,88 @@ export function deleteAluno(id: string) {
   }
 }
 
+// PROFESSORES
+export function addProfessor(professor: Omit<Professor, "id">) {
+  const store = getEbdStore();
+  const nameExists = store.professores.some((p) => p.nome.trim().toLowerCase() === professor.nome.trim().toLowerCase());
+  if (nameExists) {
+    throw new Error("Já existe um professor cadastrado com este nome.");
+  }
+  const id = generateUUID();
+  const newProfessor: Professor = {
+    ...professor,
+    id,
+  };
+  store.professores.push(newProfessor);
+  saveEbdStore(store);
+
+  if (supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("professores").insert({
+        id,
+        nome: professor.nome,
+        telefone: professor.telefone,
+        email: professor.email,
+        observacoes: professor.observacoes,
+        ativo: professor.ativo,
+      }).then(({ error }) => {
+        if (error) console.error("Error syncing addProfessor:", error);
+      });
+    }
+  }
+  return newProfessor;
+}
+
+export function updateProfessor(professor: Professor) {
+  const store = getEbdStore();
+  const nameExists = store.professores.some(
+    (p) => p.id !== professor.id && p.nome.trim().toLowerCase() === professor.nome.trim().toLowerCase()
+  );
+  if (nameExists) {
+    throw new Error("Já existe um professor cadastrado com este nome.");
+  }
+  store.professores = store.professores.map((p) => (p.id === professor.id ? professor : p));
+  saveEbdStore(store);
+
+  if (supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("professores").update({
+        nome: professor.nome,
+        telefone: professor.telefone,
+        email: professor.email,
+        observacoes: professor.observacoes,
+        ativo: professor.ativo,
+      }).eq("id", professor.id).then(({ error }) => {
+        if (error) console.error("Error syncing updateProfessor:", error);
+      });
+    }
+  }
+}
+
+export function deleteProfessor(id: string) {
+  const store = getEbdStore();
+  
+  // Rule: Check if professor is linked to any active classes
+  const isLinked = store.classes.some((c) => (c.professor_id === id || c.professor_auxiliar_id === id) && c.status === "ATIVA");
+  if (isLinked) {
+    throw new Error("Não é possível excluir um professor vinculado a uma classe ativa.");
+  }
+
+  store.professores = store.professores.filter((p) => p.id !== id);
+  saveEbdStore(store);
+
+  if (supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("professores").delete().eq("id", id).then(({ error }) => {
+        if (error) console.error("Error syncing deleteProfessor:", error);
+      });
+    }
+  }
+}
+
 // CLASSES
 export function addClasse(classe: Omit<Classe, "id">) {
   const store = getEbdStore();
@@ -1010,6 +1175,7 @@ export function addCurso(curso: Omit<Curso, "id">) {
         nome: curso.nome,
         descricao: curso.descricao,
         professor: curso.professor,
+        professor_id: curso.professor_id,
         carga_horaria: curso.carga_horaria,
         data_inicio: curso.data_inicio,
         data_fim: curso.data_fim,
@@ -1038,6 +1204,7 @@ export function updateCurso(curso: Curso) {
         nome: curso.nome,
         descricao: curso.descricao,
         professor: curso.professor,
+        professor_id: curso.professor_id,
         carga_horaria: curso.carga_horaria,
         data_inicio: curso.data_inicio,
         data_fim: curso.data_fim,

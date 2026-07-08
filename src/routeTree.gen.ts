@@ -12,9 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as InscricaoClasseIdRouteImport } from './routes/inscricao.$classeId'
 import { Route as AuthLoginRouteImport } from './routes/_auth.login'
 import { Route as AuthCadastroRouteImport } from './routes/_auth.cadastro'
 import { Route as AppRelatoriosRouteImport } from './routes/_app.relatorios'
+import { Route as AppProfessoresRouteImport } from './routes/_app.professores'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppCursosRouteImport } from './routes/_app.cursos'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app.configuracoes'
@@ -36,6 +38,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InscricaoClasseIdRoute = InscricaoClasseIdRouteImport.update({
+  id: '/inscricao/$classeId',
+  path: '/inscricao/$classeId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -49,6 +56,11 @@ const AuthCadastroRoute = AuthCadastroRouteImport.update({
 const AppRelatoriosRoute = AppRelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfessoresRoute = AppProfessoresRouteImport.update({
+  id: '/professores',
+  path: '/professores',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -95,9 +107,11 @@ export interface FileRoutesByFullPath {
   '/configuracoes': typeof AppConfiguracoesRoute
   '/cursos': typeof AppCursosRoute
   '/dashboard': typeof AppDashboardRoute
+  '/professores': typeof AppProfessoresRoute
   '/relatorios': typeof AppRelatoriosRoute
   '/cadastro': typeof AuthCadastroRoute
   '/login': typeof AuthLoginRoute
+  '/inscricao/$classeId': typeof InscricaoClasseIdRoute
   '/aulas/registrar': typeof AppAulasRegistrarRoute
 }
 export interface FileRoutesByTo {
@@ -108,9 +122,11 @@ export interface FileRoutesByTo {
   '/configuracoes': typeof AppConfiguracoesRoute
   '/cursos': typeof AppCursosRoute
   '/dashboard': typeof AppDashboardRoute
+  '/professores': typeof AppProfessoresRoute
   '/relatorios': typeof AppRelatoriosRoute
   '/cadastro': typeof AuthCadastroRoute
   '/login': typeof AuthLoginRoute
+  '/inscricao/$classeId': typeof InscricaoClasseIdRoute
   '/aulas/registrar': typeof AppAulasRegistrarRoute
 }
 export interface FileRoutesById {
@@ -124,9 +140,11 @@ export interface FileRoutesById {
   '/_app/configuracoes': typeof AppConfiguracoesRoute
   '/_app/cursos': typeof AppCursosRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/professores': typeof AppProfessoresRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/_auth/cadastro': typeof AuthCadastroRoute
   '/_auth/login': typeof AuthLoginRoute
+  '/inscricao/$classeId': typeof InscricaoClasseIdRoute
   '/_app/aulas/registrar': typeof AppAulasRegistrarRoute
 }
 export interface FileRouteTypes {
@@ -139,9 +157,11 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/cursos'
     | '/dashboard'
+    | '/professores'
     | '/relatorios'
     | '/cadastro'
     | '/login'
+    | '/inscricao/$classeId'
     | '/aulas/registrar'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -152,9 +172,11 @@ export interface FileRouteTypes {
     | '/configuracoes'
     | '/cursos'
     | '/dashboard'
+    | '/professores'
     | '/relatorios'
     | '/cadastro'
     | '/login'
+    | '/inscricao/$classeId'
     | '/aulas/registrar'
   id:
     | '__root__'
@@ -167,9 +189,11 @@ export interface FileRouteTypes {
     | '/_app/configuracoes'
     | '/_app/cursos'
     | '/_app/dashboard'
+    | '/_app/professores'
     | '/_app/relatorios'
     | '/_auth/cadastro'
     | '/_auth/login'
+    | '/inscricao/$classeId'
     | '/_app/aulas/registrar'
   fileRoutesById: FileRoutesById
 }
@@ -177,6 +201,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRouteWithChildren
+  InscricaoClasseIdRoute: typeof InscricaoClasseIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -202,6 +227,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/inscricao/$classeId': {
+      id: '/inscricao/$classeId'
+      path: '/inscricao/$classeId'
+      fullPath: '/inscricao/$classeId'
+      preLoaderRoute: typeof InscricaoClasseIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_auth/login': {
       id: '/_auth/login'
       path: '/login'
@@ -221,6 +253,13 @@ declare module '@tanstack/react-router' {
       path: '/relatorios'
       fullPath: '/relatorios'
       preLoaderRoute: typeof AppRelatoriosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/professores': {
+      id: '/_app/professores'
+      path: '/professores'
+      fullPath: '/professores'
+      preLoaderRoute: typeof AppProfessoresRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
@@ -294,6 +333,7 @@ interface AppRouteChildren {
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
   AppCursosRoute: typeof AppCursosRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppProfessoresRoute: typeof AppProfessoresRoute
   AppRelatoriosRoute: typeof AppRelatoriosRoute
 }
 
@@ -304,6 +344,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppConfiguracoesRoute: AppConfiguracoesRoute,
   AppCursosRoute: AppCursosRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppProfessoresRoute: AppProfessoresRoute,
   AppRelatoriosRoute: AppRelatoriosRoute,
 }
 
@@ -325,7 +366,18 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRouteWithChildren,
+  InscricaoClasseIdRoute: InscricaoClasseIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

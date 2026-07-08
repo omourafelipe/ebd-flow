@@ -120,6 +120,7 @@ function CursosPage() {
 
   // Auth State
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState<string>("");
   const [currentUserRole, setCurrentUserRole] = useState<string>("STUDENT");
 
   useEffect(() => {
@@ -130,14 +131,16 @@ function CursosPage() {
           setCurrentUserId(session.user.id);
           const { data: profile } = await supabase
             .from("profiles")
-            .select("role")
+            .select("nome, role")
             .eq("id", session.user.id)
             .maybeSingle();
           setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+          setCurrentUserName(profile?.nome || session.user.user_metadata?.nome || session.user.user_metadata?.name || "");
         }
       } else {
         // Fallback para demo
         setCurrentUserRole("ADMIN");
+        setCurrentUserName("Administrador Demo");
       }
     }
     loadAuth();
@@ -146,7 +149,10 @@ function CursosPage() {
   // Helper de Permissão
   const canManageCourse = (curso: Curso | null = null) => {
     if (currentUserRole === "ADMIN") return true;
-    if (currentUserRole === "TEACHER" && curso && curso.professor_id === currentUserId) return true;
+    if (currentUserRole === "TEACHER") {
+      if (!curso) return true;
+      return curso.professor_id === currentUserId || !curso.professor_id;
+    }
     return false;
   };
 
@@ -182,7 +188,7 @@ function CursosPage() {
   const handleOpenCreate = () => {
     setEditingCurso(null);
     setNome("");
-    setProfessor("");
+    setProfessor(currentUserRole === "TEACHER" ? currentUserName : "");
     setStatus("PLANEJADO");
     setDescricao("");
     setCargaHoraria("");
@@ -227,6 +233,7 @@ function CursosPage() {
       const payload = {
         nome: nome.trim(),
         professor: professor.trim() || null,
+        professor_id: editingCurso ? editingCurso.professor_id : (currentUserRole === "TEACHER" ? currentUserId : null),
         status,
         descricao: descricao.trim() || null,
         carga_horaria: cargaHoraria === "" ? null : Number(cargaHoraria),
@@ -729,20 +736,24 @@ function CursosPage() {
                             <Eye className="h-3.5 w-3.5 text-slate-400" />
                             Visualizar
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleOpenEdit(c)}
-                            className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                          >
-                            <Edit2 className="h-3.5 w-3.5 text-slate-400" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setDeletingCursoId(c.id)}
-                            className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                            Excluir
-                          </DropdownMenuItem>
+                          {canManageCourse(c) && (
+                            <>
+                              <DropdownMenuItem
+                                onClick={() => handleOpenEdit(c)}
+                                className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                              >
+                                <Edit2 className="h-3.5 w-3.5 text-slate-400" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setDeletingCursoId(c.id)}
+                                className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                              >
+                                <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -808,12 +819,14 @@ function CursosPage() {
       )}
 
       {/* MOBILE FLOATING ACTION BUTTON (FAB) */}
-      <Button
-        onClick={handleOpenCreate}
-        className="sm:hidden fixed right-4 bottom-20 h-12 w-12 rounded-full bg-primary hover:bg-primary/95 text-white shadow-[0_4px_12px_rgba(20,83,45,0.3)] z-40 flex items-center justify-center cursor-pointer border border-primary/20"
-      >
-        <Plus className="h-6 w-6 text-white" />
-      </Button>
+      {canManageCourse() && (
+        <Button
+          onClick={handleOpenCreate}
+          className="sm:hidden fixed right-4 bottom-20 h-12 w-12 rounded-full bg-primary hover:bg-primary/95 text-white shadow-[0_4px_12px_rgba(20,83,45,0.3)] z-40 flex items-center justify-center cursor-pointer border border-primary/20"
+        >
+          <Plus className="h-6 w-6 text-white" />
+        </Button>
+      )}
 
       {/* FORM DIALOG (NEW/EDIT) */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
@@ -1137,23 +1150,25 @@ function CursosPage() {
             </div>
 
             {/* Edit / operations footer */}
-            <div className="p-4 bg-white border-t border-slate-100 flex-shrink-0 grid grid-cols-2 gap-3">
-              <Button
-                onClick={() => handleOpenEdit(selectedCurso)}
-                className="w-full bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 h-10 cursor-pointer shadow-soft"
-              >
-                <Edit2 className="h-3.5 w-3.5" />
-                Editar Curso
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setDeletingCursoId(selectedCurso.id)}
-                className="w-full border-red-100 hover:bg-red-50 text-red-600 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 h-10 cursor-pointer"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Excluir
-              </Button>
-            </div>
+            {canManageCourse(selectedCurso) && (
+              <div className="p-4 bg-white border-t border-slate-100 flex-shrink-0 grid grid-cols-2 gap-3">
+                <Button
+                  onClick={() => handleOpenEdit(selectedCurso)}
+                  className="w-full bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 h-10 cursor-pointer shadow-soft"
+                >
+                  <Edit2 className="h-3.5 w-3.5" />
+                  Editar Curso
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setDeletingCursoId(selectedCurso.id)}
+                  className="w-full border-red-100 hover:bg-red-50 text-red-600 font-semibold rounded-xl text-xs flex items-center justify-center gap-1.5 h-10 cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Excluir
+                </Button>
+              </div>
+            )}
           </SheetContent>
         )}
       </Sheet>
