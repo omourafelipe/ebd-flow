@@ -10,6 +10,7 @@ import { AppBottomNav } from "@/components/app/AppBottomNav";
 import { AppHeader } from "@/components/app/AppHeader";
 
 export const Route = createFileRoute("/_app")({
+  ssr: false,
   beforeLoad: async () => {
     const isDemo =
       typeof window !== "undefined" &&
