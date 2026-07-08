@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEbdStore, Aula, Aluno, Classe } from "@/lib/store";
+import { useEbdStore } from "@/lib/store";
 import { useState, useEffect } from "react";
 import {
   Users,
@@ -11,12 +11,12 @@ import {
   Plus,
   FileText,
   Info,
-  CalendarCheck,
-  ChevronRight,
+  TrendingUp,
+  BookOpenCheck,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   BarChart,
   Bar,
@@ -33,6 +33,66 @@ export const Route = createFileRoute("/_app/dashboard")({
   component: Dashboard,
 });
 
+// ─── Types ─────────────────────────────────────────────────────────────────
+type StatTone = "primary" | "success" | "info" | "warning";
+
+interface StatCardProps {
+  label: string;
+  value: number | string;
+  hint?: string;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  tone: StatTone;
+}
+
+interface AlertItem {
+  type: "info" | "warning" | "success";
+  title: string;
+  message: string;
+}
+
+// ─── Tone maps (semantic tokens only) ──────────────────────────────────────
+const toneIconBg: Record<StatTone, string> = {
+  primary: "bg-primary-soft text-primary",
+  success: "bg-success/10 text-success",
+  info: "bg-info/10 text-info",
+  warning: "bg-warning/15 text-warning-foreground",
+};
+
+const alertToneMap: Record<AlertItem["type"], { bg: string; text: string; Icon: React.ComponentType<{ className?: string }> }> = {
+  info: { bg: "bg-info/10", text: "text-info", Icon: Info },
+  warning: { bg: "bg-destructive/10", text: "text-destructive", Icon: AlertTriangle },
+  success: { bg: "bg-success/10", text: "text-success", Icon: CheckCircle2 },
+};
+
+// ─── Presentational components ─────────────────────────────────────────────
+function StatCard({ label, value, hint, icon: Icon, tone }: StatCardProps) {
+  return (
+    <Card className="border-border/60 shadow-soft">
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`h-11 w-11 rounded-xl flex items-center justify-center flex-shrink-0 ${toneIconBg[tone]}`}>
+          <Icon className="h-5 w-5" strokeWidth={2.25} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+            {label}
+          </p>
+          <h4 className="text-xl font-bold text-foreground leading-tight">{value}</h4>
+          {hint ? <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p> : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h4 className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.08em] px-1">
+      {children}
+    </h4>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────
 function Dashboard() {
   const store = useEbdStore();
   const [isMounted, setIsMounted] = useState(false);
@@ -41,265 +101,247 @@ function Dashboard() {
     setIsMounted(true);
   }, []);
 
-  const totalAlunos = store.alunos.length;
+  const totalAlunos = store.alunos.filter((a) => a.status !== "INATIVO").length;
   const visitantes = store.alunos.filter((a) => a.status === "VISITANTE").length;
   const cursosAtivos = store.cursos.filter((c) => c.status === "EM_ANDAMENTO").length;
+  const classesAtivas = store.classes.filter((c) => c.status === "ATIVA").length;
 
-  // Calculate presence in the last registered class session
-  const getLastClassPresence = () => {
-    if (store.aulas.length === 0) return 0;
-    // Sort classes by date descending
-    const sortedAulas = [...store.aulas].sort(
-      (a, b) => new Date(b.data_aula).getTime() - new Date(a.data_aula).getTime(),
-    );
-    const lastAula = sortedAulas[0];
-    const presenceValues = Object.values(lastAula.presencas);
-    const presents = presenceValues.filter((p) => p.presente).length;
-    return presents;
-  };
+  // Última aula registrada
+  const sortedAulas = [...store.aulas].sort(
+    (a, b) => new Date(b.data_aula).getTime() - new Date(a.data_aula).getTime(),
+  );
+  const lastAula = sortedAulas[0];
+  const lastAulaPresentes = lastAula
+    ? Object.values(lastAula.presencas).filter((p) => p.presente).length
+    : 0;
+  const lastAulaTotal = lastAula ? Object.values(lastAula.presencas).length : 0;
+  const lastAulaTaxa =
+    lastAulaTotal > 0 ? Math.round((lastAulaPresentes / lastAulaTotal) * 100) : 0;
 
-  const presentesHoje = getLastClassPresence();
+  // Alertas
+  const alerts: AlertItem[] = (() => {
+    const list: AlertItem[] = [];
 
-  // Alert generation logic
-  const getAlerts = () => {
-    const alertsList: { type: "info" | "warning"; message: string; title: string }[] = [];
-
-    // Inactive classes alert
-    const inactiveClasses = store.classes.filter((c) => c.status === "INATIVA");
-    if (inactiveClasses.length > 0) {
-      alertsList.push({
+    const inactive = store.classes.filter((c) => c.status === "INATIVA");
+    if (inactive.length > 0) {
+      list.push({
         type: "info",
-        title: "Classes Inativas",
-        message: `A classe "${inactiveClasses[0].nome}" está atualmente inativa.`,
+        title: "Classes inativas",
+        message: `A classe "${inactive[0].nome}" está inativa no momento.`,
       });
     }
 
-    // Class with zero students alert
     store.classes.forEach((c) => {
-      const studentsInClass = store.alunos.filter((a) => a.classe_id === c.id);
-      if (studentsInClass.length === 0 && c.status === "ATIVA") {
-        alertsList.push({
+      if (c.status !== "ATIVA") return;
+      const count = store.alunos.filter((a) => a.classe_id === c.id).length;
+      if (count === 0) {
+        list.push({
           type: "warning",
-          title: "Classe Sem Alunos",
-          message: `A classe ativa "${c.nome}" não possui nenhum aluno matriculado.`,
+          title: "Classe sem alunos",
+          message: `A classe "${c.nome}" está ativa mas ainda não possui alunos matriculados.`,
         });
       }
     });
 
-    // Absent students in last class alert
-    if (store.aulas.length > 0) {
-      const sortedAulas = [...store.aulas].sort(
-        (a, b) => new Date(b.data_aula).getTime() - new Date(a.data_aula).getTime(),
-      );
-      const lastAula = sortedAulas[0];
-      const absentees = store.alunos.filter(
+    if (lastAula) {
+      const faltosos = store.alunos.filter(
         (a) =>
           a.classe_id === lastAula.classe_id &&
           lastAula.presencas[a.id] &&
           !lastAula.presencas[a.id].presente,
       );
-
-      if (absentees.length > 0) {
-        alertsList.push({
+      if (faltosos.length > 0) {
+        const nomes = faltosos.slice(0, 2).map((a) => a.nome).join(" e ");
+        const resto = faltosos.length > 2 ? ` e outros ${faltosos.length - 2}` : "";
+        list.push({
           type: "warning",
-          title: "Alunos Faltosos",
-          message: `${absentees.map((a) => a.nome).slice(0, 2).join(" e ")} ${absentees.length > 2 ? `e outros ${absentees.length - 2}` : ""} faltaram na última aula.`,
+          title: "Alunos faltosos",
+          message: `${nomes}${resto} não compareceram na última aula.`,
         });
       }
     }
 
-    // Default alert if nothing else
-    if (alertsList.length === 0) {
-      alertsList.push({
-        type: "info",
-        title: "Tudo em ordem!",
-        message: "As estatísticas de frequência estão em dia e todas as classes ativas possuem alunos.",
+    if (list.length === 0) {
+      list.push({
+        type: "success",
+        title: "Tudo em ordem",
+        message: "Todas as classes ativas possuem alunos e os registros estão em dia.",
       });
     }
 
-    return alertsList;
-  };
+    return list;
+  })();
 
-  const alerts = getAlerts();
+  // Alunos por classe
+  const classData = store.classes
+    .filter((c) => c.status === "ATIVA")
+    .map((c) => ({
+      name: c.nome.split(/[—–-]/)[0].trim(),
+      Alunos: store.alunos.filter((a) => a.classe_id === c.id).length,
+    }));
 
-  // Data prep for class distribution data
-  const getClassDistributionData = () => {
-    return store.classes
-      .filter((c) => c.status === "ATIVA")
-      .map((c) => {
-        const count = store.alunos.filter((a) => a.classe_id === c.id).length;
-        // Truncate name before any kind of dash (em-dash, en-dash, hyphen)
-        const name = c.nome.split(/[—–-]/)[0].trim();
-        return {
-          name,
-          Alunos: count,
-        };
-      });
-  };
-
-  // Data prep for historical attendance chart (last 5 lessons)
-  const getHistoricalAttendanceData = () => {
-    // Group all lessons by date
-    const attendanceByDate: Record<string, { presents: number; total: number }> = {};
-
-    store.aulas.forEach((aula) => {
-      const presValues = Object.values(aula.presencas);
-      const presentsCount = presValues.filter((p) => p.presente).length;
-      const totalCount = presValues.length;
-
-      if (!attendanceByDate[aula.data_aula]) {
-        attendanceByDate[aula.data_aula] = { presents: 0, total: 0 };
-      }
-      attendanceByDate[aula.data_aula].presents += presentsCount;
-      attendanceByDate[aula.data_aula].total += totalCount;
-    });
-
-    const sortedDates = Object.keys(attendanceByDate).sort();
-    return sortedDates.slice(-5).map((date) => {
-      const formattedDate = date.split("-").reverse().slice(0, 2).join("/"); // DD/MM
+  // Frequência histórica (últimas 5 aulas por data)
+  const attendanceByDate: Record<string, { presents: number; total: number }> = {};
+  store.aulas.forEach((aula) => {
+    const values = Object.values(aula.presencas);
+    const presents = values.filter((p) => p.presente).length;
+    if (!attendanceByDate[aula.data_aula]) {
+      attendanceByDate[aula.data_aula] = { presents: 0, total: 0 };
+    }
+    attendanceByDate[aula.data_aula].presents += presents;
+    attendanceByDate[aula.data_aula].total += values.length;
+  });
+  const historyData = Object.keys(attendanceByDate)
+    .sort()
+    .slice(-5)
+    .map((date) => {
       const val = attendanceByDate[date];
       const rate = val.total > 0 ? Math.round((val.presents / val.total) * 100) : 0;
-      return {
-        data: formattedDate,
-        Frequência: rate,
-      };
+      const [, m, d] = date.split("-");
+      return { data: `${d}/${m}`, Frequência: rate };
     });
-  };
-
-  const classData = getClassDistributionData();
-  const historyData = getHistoricalAttendanceData();
 
   return (
     <div className="space-y-6">
-      {/* Welcome & Stats Grid */}
-      <div>
-        <h3 className="text-xl font-bold text-slate-800 tracking-tight">Visão Geral</h3>
-        <p className="text-xs text-slate-500">Métricas e relatórios rápidos da Escola Bíblica.</p>
+      {/* Cabeçalho */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-bold text-foreground tracking-tight">Visão geral</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Indicadores rápidos da Escola Bíblica Dominical.
+          </p>
+        </div>
+        {lastAula ? (
+          <Badge
+            variant="secondary"
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-full text-[10px] font-semibold"
+          >
+            <TrendingUp className="h-3 w-3" />
+            Última aula: {lastAulaTaxa}% presentes
+          </Badge>
+        ) : null}
       </div>
 
-      {/* STAT CARDS */}
+      {/* Cards de estatística */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-none shadow-soft bg-white">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center">
-              <Users className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Alunos</p>
-              <h4 className="text-lg font-bold text-slate-800">{totalAlunos}</h4>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-soft bg-white">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-green-50 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Presentes</p>
-              <h4 className="text-lg font-bold text-slate-800">{presentesHoje}</h4>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-soft bg-white">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <UserPlus className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Visitantes</p>
-              <h4 className="text-lg font-bold text-slate-800">{visitantes}</h4>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-soft bg-white">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <GraduationCap className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Cursos</p>
-              <h4 className="text-lg font-bold text-slate-800">{cursosAtivos}</h4>
-            </div>
-          </CardContent>
-        </Card>
+        <StatCard
+          label="Alunos"
+          value={totalAlunos}
+          hint={`${classesAtivas} ${classesAtivas === 1 ? "classe ativa" : "classes ativas"}`}
+          icon={Users}
+          tone="primary"
+        />
+        <StatCard
+          label="Presentes"
+          value={lastAulaPresentes}
+          hint={lastAula ? `de ${lastAulaTotal} na última aula` : "sem aula registrada"}
+          icon={CheckCircle2}
+          tone="success"
+        />
+        <StatCard
+          label="Visitantes"
+          value={visitantes}
+          hint="Cadastro em aberto"
+          icon={UserPlus}
+          tone="info"
+        />
+        <StatCard
+          label="Cursos"
+          value={cursosAtivos}
+          hint="em andamento"
+          icon={GraduationCap}
+          tone="warning"
+        />
       </div>
 
-      {/* QUICK ACTIONS */}
-      <Card className="border-none shadow-soft bg-white">
+      {/* Ações rápidas */}
+      <Card className="border-border/60 shadow-soft">
         <CardHeader className="p-4 pb-0">
-          <CardTitle className="text-xs font-bold text-slate-400 uppercase tracking-wider">Ações Rápidas</CardTitle>
+          <CardTitle className="text-[11px] font-bold text-muted-foreground uppercase tracking-[0.08em]">
+            Ações rápidas
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Button
             asChild
-            className="w-full bg-primary hover:bg-primary/95 text-white rounded-xl py-5 h-auto text-xs font-semibold flex flex-col items-center gap-1.5 cursor-pointer shadow-soft"
+            className="w-full rounded-xl h-auto py-4 text-xs font-semibold flex flex-col items-center gap-1.5 shadow-soft"
           >
             <Link to="/aulas/registrar">
-              <CalendarPlus className="h-4.5 w-4.5" />
-              <span>Registrar Aula</span>
+              <CalendarPlus className="h-5 w-5" />
+              <span>Registrar aula</span>
             </Link>
           </Button>
 
           <Button
             asChild
             variant="outline"
-            className="w-full border-slate-100 hover:bg-slate-50 text-slate-700 rounded-xl py-5 h-auto text-xs font-semibold flex flex-col items-center gap-1.5 cursor-pointer"
+            className="w-full rounded-xl h-auto py-4 text-xs font-semibold flex flex-col items-center gap-1.5"
           >
             <Link to="/alunos" search={{ novo: "true" }}>
-              <UserPlus className="h-4.5 w-4.5 text-slate-400" />
-              <span>Novo Aluno</span>
+              <UserPlus className="h-5 w-5 text-muted-foreground" />
+              <span>Novo aluno</span>
             </Link>
           </Button>
 
           <Button
             asChild
             variant="outline"
-            className="w-full border-slate-100 hover:bg-slate-50 text-slate-700 rounded-xl py-5 h-auto text-xs font-semibold flex flex-col items-center gap-1.5 cursor-pointer"
+            className="w-full rounded-xl h-auto py-4 text-xs font-semibold flex flex-col items-center gap-1.5"
           >
             <Link to="/classes" search={{ nova: "true" }}>
-              <Plus className="h-4.5 w-4.5 text-slate-400" />
-              <span>Nova Classe</span>
+              <Plus className="h-5 w-5 text-muted-foreground" />
+              <span>Nova classe</span>
             </Link>
           </Button>
 
           <Button
             asChild
             variant="outline"
-            className="w-full border-slate-100 hover:bg-slate-50 text-slate-700 rounded-xl py-5 h-auto text-xs font-semibold flex flex-col items-center gap-1.5 cursor-pointer"
+            className="w-full rounded-xl h-auto py-4 text-xs font-semibold flex flex-col items-center gap-1.5"
           >
             <Link to="/relatorios">
-              <FileText className="h-4.5 w-4.5 text-slate-400" />
+              <FileText className="h-5 w-5 text-muted-foreground" />
               <span>Relatórios</span>
             </Link>
           </Button>
         </CardContent>
       </Card>
 
-      {/* CHARTS CONTAINER */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Attendance frequency */}
-        <Card className="border-none shadow-soft bg-white">
+      {/* Gráficos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="border-border/60 shadow-soft">
           <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-bold text-slate-800 tracking-tight">Frequência da EBD (%)</CardTitle>
-            <p className="text-[11px] text-slate-400 font-medium">Percentual de presença nos últimos domingos.</p>
+            <CardTitle className="text-sm font-bold text-foreground tracking-tight">
+              Frequência da EBD
+            </CardTitle>
+            <p className="text-[11px] text-muted-foreground font-medium">
+              Percentual de presença nas últimas aulas.
+            </p>
           </CardHeader>
-          <CardContent className="p-4 pt-0 h-48">
+          <CardContent className="p-4 pt-0 h-56">
             {isMounted && historyData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={historyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="data" tickLine={false} axisLine={false} style={{ fontSize: 10, fill: "#94a3b8" }} />
-                  <YAxis domain={[0, 100]} tickLine={false} axisLine={false} style={{ fontSize: 10, fill: "#94a3b8" }} />
+                <LineChart data={historyData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis
+                    dataKey="data"
+                    tickLine={false}
+                    axisLine={false}
+                    style={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tickLine={false}
+                    axisLine={false}
+                    style={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                  />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "none",
+                      backgroundColor: "var(--color-popover)",
+                      color: "var(--color-popover-foreground)",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 12,
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                      boxShadow: "var(--shadow-elevated)",
                       fontSize: 11,
                     }}
                     formatter={(value) => [`${value}%`, "Frequência"]}
@@ -308,87 +350,112 @@ function Dashboard() {
                     type="monotone"
                     dataKey="Frequência"
                     stroke="var(--color-primary)"
-                    strokeWidth={3}
-                    dot={{ fill: "var(--color-primary)", r: 4 }}
-                    activeDot={{ r: 6 }}
+                    strokeWidth={2.5}
+                    dot={{ fill: "var(--color-primary)", r: 4, strokeWidth: 0 }}
+                    activeDot={{ r: 6, fill: "var(--color-primary)" }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                Aguardando registro de aulas...
-              </div>
+              <EmptyChart
+                icon={TrendingUp}
+                message="Aguardando registro de aulas para exibir a frequência."
+              />
             )}
           </CardContent>
         </Card>
 
-        {/* Students per class */}
-        <Card className="border-none shadow-soft bg-white">
+        <Card className="border-border/60 shadow-soft">
           <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-bold text-slate-800 tracking-tight">Alunos por Classe</CardTitle>
-            <p className="text-[11px] text-slate-400 font-medium">Quantidade de alunos matriculados por turma.</p>
+            <CardTitle className="text-sm font-bold text-foreground tracking-tight">
+              Alunos por classe
+            </CardTitle>
+            <p className="text-[11px] text-muted-foreground font-medium">
+              Distribuição atual das classes ativas.
+            </p>
           </CardHeader>
-          <CardContent className="p-4 pt-0 h-48">
+          <CardContent className="p-4 pt-0 h-56">
             {isMounted && classData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={classData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="name" tickLine={false} axisLine={false} style={{ fontSize: 10, fill: "#94a3b8" }} />
-                  <YAxis tickLine={false} axisLine={false} style={{ fontSize: 10, fill: "#94a3b8" }} />
+                <BarChart data={classData} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tickLine={false}
+                    axisLine={false}
+                    style={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    style={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                    allowDecimals={false}
+                  />
                   <Tooltip
-                    cursor={{ fill: "#f8fafc" }}
+                    cursor={{ fill: "var(--color-muted)" }}
                     contentStyle={{
-                      backgroundColor: "#fff",
-                      border: "none",
+                      backgroundColor: "var(--color-popover)",
+                      color: "var(--color-popover-foreground)",
+                      border: "1px solid var(--color-border)",
                       borderRadius: 12,
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                      boxShadow: "var(--shadow-elevated)",
                       fontSize: 11,
                     }}
                   />
-                  <Bar dataKey="Alunos" fill="var(--color-primary)" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="Alunos" fill="var(--color-primary)" radius={[6, 6, 0, 0]} maxBarSize={40} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-full flex items-center justify-center text-xs text-slate-400">
-                Aguardando classes ativas...
-              </div>
+              <EmptyChart
+                icon={BookOpenCheck}
+                message="Nenhuma classe ativa. Cadastre uma classe para começar."
+              />
             )}
           </CardContent>
         </Card>
       </div>
 
-      {/* ALERTS */}
+      {/* Alertas */}
       <div className="space-y-3">
-        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">Alertas e Avisos</h4>
+        <SectionTitle>Alertas e avisos</SectionTitle>
         <div className="space-y-2">
-          {alerts.map((alert, index) => (
-            <Alert
-              key={index}
-              className={`border-none shadow-soft rounded-xl flex items-start gap-3 p-4 bg-white`}
-            >
-              <div
-                className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  alert.type === "warning" ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
-                }`}
-              >
-                {alert.type === "warning" ? (
-                  <AlertTriangle className="h-4.5 w-4.5" />
-                ) : (
-                  <Info className="h-4.5 w-4.5" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1 leading-tight">
-                <AlertTitle className="text-xs font-bold text-slate-800 mb-0.5">
-                  {alert.title}
-                </AlertTitle>
-                <AlertDescription className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                  {alert.message}
-                </AlertDescription>
-              </div>
-            </Alert>
-          ))}
+          {alerts.map((alert, index) => {
+            const { bg, text, Icon } = alertToneMap[alert.type];
+            return (
+              <Card key={index} className="border-border/60 shadow-soft">
+                <CardContent className="p-4 flex items-start gap-3">
+                  <div className={`h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0 ${bg} ${text}`}>
+                    <Icon className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="min-w-0 flex-1 leading-tight">
+                    <p className="text-xs font-bold text-foreground mb-0.5">{alert.title}</p>
+                    <p className="text-[11px] text-muted-foreground font-medium leading-relaxed">
+                      {alert.message}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </div>
+    </div>
+  );
+}
+
+function EmptyChart({
+  icon: Icon,
+  message,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  message: string;
+}) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
+      <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
+        <Icon className="h-5 w-5" />
+      </div>
+      <p className="text-[11px] font-medium text-center max-w-[220px]">{message}</p>
     </div>
   );
 }
