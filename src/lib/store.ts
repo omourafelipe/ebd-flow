@@ -273,9 +273,6 @@ const DEFAULT_DATA: EbdStoreData = {
       observacoes: "Auxiliar da classe de Juniores.",
       ativo: true
     }
-  ],
-  alunos: [,
-  ],
   alunos: [
     {
       id: ALUNO_ANDRE,
