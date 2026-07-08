@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,38 +28,26 @@ function LoginPage() {
 
     setLoading(true);
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
 
-        if (error) {
-          toast.error(error.message);
-        } else {
-          if (typeof window !== "undefined") {
-            window.localStorage.removeItem("ebd_demo_mode");
-          }
-          toast.success("Login efetuado com sucesso!");
-          navigate({ to: "/dashboard" });
-        }
-      } catch (err: any) {
-        toast.error("Erro inesperado durante o login.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      // Offline fallback / Demo Mode
-      setTimeout(() => {
-        setLoading(false);
+      if (error) {
+        toast.error(error.message);
+      } else {
         if (typeof window !== "undefined") {
-          window.localStorage.setItem("ebd_demo_mode", "true");
+          window.localStorage.removeItem("ebd_demo_mode");
         }
-        toast.success("Logado no Modo de Demonstração (LocalStorage)");
+        toast.success("Login efetuado com sucesso!");
         navigate({ to: "/dashboard" });
-      }, 800);
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado durante o login.");
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 

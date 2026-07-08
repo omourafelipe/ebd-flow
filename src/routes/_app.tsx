@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useEbdStore, syncFromSupabase } from "@/lib/store";
 import { useState, useEffect } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
@@ -15,17 +15,10 @@ export const Route = createFileRoute("/_app")({
       typeof window !== "undefined" &&
       window.localStorage.getItem("ebd_demo_mode") === "true";
 
-    // RF01 — Protect route: if no demo mode, require a valid Supabase session.
-    // When Supabase is not configured at all, treat as demo-only environment:
-    // allow access only if demo flag is set, otherwise redirect.
+    // RF01 — Protect route: if no demo mode, require a valid Lovable Cloud session.
     if (!isDemo) {
-      if (isSupabaseConfigured && supabase) {
-        const { data } = await supabase.auth.getSession();
-        if (!data.session) {
-          throw redirect({ to: "/login" });
-        }
-      } else {
-        // Supabase not configured and not in demo mode → no access
+      const { data } = await supabase.auth.getSession();
+      if (!data.session) {
         throw redirect({ to: "/login" });
       }
     }
@@ -49,39 +42,33 @@ function AppLayout() {
 
     // RF06 — Load user profile (independent of sync).
     async function loadProfile() {
-      if (isSupabaseConfigured && supabase) {
-        try {
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
-          if (session?.user) {
-            const { data: profile } = await supabase
-              .from("profiles")
-              .select("nome, role")
-              .eq("id", session.user.id)
-              .maybeSingle();
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("nome, role")
+            .eq("id", session.user.id)
+            .maybeSingle();
 
-            if (profile) {
-              setUserName(profile.nome);
-              setUserRole(profile.role);
-            } else {
-              // Fallback to session metadata
-              setUserName(
-                session.user.user_metadata?.nome ||
-                  session.user.user_metadata?.name ||
-                  "Usuário",
-              );
-              setUserRole(session.user.user_metadata?.role || "STUDENT");
-            }
+          if (profile) {
+            setUserName(profile.nome);
+            setUserRole(profile.role);
+          } else {
+            // Fallback to session metadata
+            setUserName(
+              session.user.user_metadata?.nome ||
+                session.user.user_metadata?.name ||
+                "Usuário",
+            );
+            setUserRole(session.user.user_metadata?.role || "ADMIN");
           }
-        } catch (e) {
-          // RNF05 — Graceful degradation: keep default values on error
-          console.error("Error loading profile", e);
         }
-      } else {
-        // No Supabase configured — use defaults
-        setUserName("Administrador");
-        setUserRole("ADMIN");
+      } catch (e) {
+        // RNF05 — Graceful degradation: keep default values on error
+        console.error("Error loading profile", e);
       }
     }
     loadProfile();
@@ -89,9 +76,7 @@ function AppLayout() {
 
   // RF08 — Logout
   const handleLogout = async () => {
-    if (isSupabaseConfigured && supabase) {
-      await supabase.auth.signOut();
-    }
+    await supabase.auth.signOut();
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("ebd_demo_mode");
     }

@@ -10,7 +10,7 @@ import {
   Aluno,
 } from "@/lib/store";
 import { useState, useEffect } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 import {
   GraduationCap,
@@ -123,7 +123,7 @@ function CursosPage() {
 
   useEffect(() => {
     async function loadAuth() {
-      if (isSupabaseConfigured && supabase) {
+      if (supabase) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setCurrentUserId(session.user.id);
