@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEbdStore, addClasse, updateClasse, deleteClasse, Classe } from "@/lib/store";
 import { useState, useEffect } from "react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { z } from "zod";
 import {
   BookOpen,
@@ -108,6 +109,38 @@ function ClassesPage() {
   const [observacoes, setObservacoes] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Auth State
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string>("STUDENT");
+
+  useEffect(() => {
+    async function loadAuth() {
+      if (isSupabaseConfigured && supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setCurrentUserId(session.user.id);
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+        }
+      } else {
+        // Fallback para demo
+        setCurrentUserRole("ADMIN");
+      }
+    }
+    loadAuth();
+  }, []);
+
+  // Helper de Permissão
+  const canManageClass = (classe: Classe | null = null) => {
+    if (currentUserRole === "ADMIN") return true;
+    if (currentUserRole === "TEACHER" && classe && classe.professor_id === currentUserId) return true;
+    return false;
+  };
 
   // Auto-open modal or detail if query param exists
   useEffect(() => {
@@ -427,13 +460,15 @@ function ClassesPage() {
           </h3>
           <p className="text-xs text-slate-500 font-medium">Cadastre e gerencie as turmas da Escola Bíblica.</p>
         </div>
-        <Button
-          onClick={handleOpenCreate}
-          className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft hidden sm:flex"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Nova Classe</span>
-        </Button>
+        {canManageClass() && (
+          <Button
+            onClick={handleOpenCreate}
+            className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft hidden sm:flex"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Nova Classe</span>
+          </Button>
+        )}
       </div>
 
       {/* Search and Filters Bar */}
@@ -584,12 +619,14 @@ function ClassesPage() {
           <p className="text-xs text-slate-400 max-w-xs mt-1.5 leading-relaxed font-medium">
             Tente alterar os filtros de busca ou crie uma nova classe do zero.
           </p>
-          <Button
-            onClick={handleOpenCreate}
-            className="mt-5 bg-primary hover:bg-primary/95 text-white text-xs font-semibold rounded-xl px-5 py-2 cursor-pointer shadow-soft"
-          >
-            Cadastrar Classe
-          </Button>
+          {canManageClass() && (
+            <Button
+              onClick={handleOpenCreate}
+              className="mt-5 bg-primary hover:bg-primary/95 text-white text-xs font-semibold rounded-xl px-5 py-2 cursor-pointer shadow-soft"
+            >
+              Cadastrar Classe
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -667,34 +704,38 @@ function ClassesPage() {
                               <Eye className="h-3.5 w-3.5 text-slate-400" />
                               Visualizar
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleOpenEdit(c)}
-                              className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                            >
-                              <Edit2 className="h-3.5 w-3.5 text-slate-400" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDuplicate(c)}
-                              className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                            >
-                              <Copy className="h-3.5 w-3.5 text-slate-400" />
-                              Duplicar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleToggleStatus(c)}
-                              className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                            >
-                              <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
-                              {isAtiva ? "Inativar" : "Reativar"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeletingClasseId(c.id)}
-                              className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                              Excluir
-                            </DropdownMenuItem>
+                            {canManageClass(c) && (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => handleOpenEdit(c)}
+                                  className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5 text-slate-400" />
+                                  Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleDuplicate(c)}
+                                  className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  <Copy className="h-3.5 w-3.5 text-slate-400" />
+                                  Duplicar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleToggleStatus(c)}
+                                  className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  <RefreshCw className="h-3.5 w-3.5 text-slate-400" />
+                                  {isAtiva ? "Inativar" : "Reativar"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => setDeletingClasseId(c.id)}
+                                  className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                                  Excluir
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

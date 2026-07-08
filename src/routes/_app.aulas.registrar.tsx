@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEbdStore, addAula, Aula, Aluno } from "@/lib/store";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   BookOpen,
   Calendar,
@@ -42,7 +43,36 @@ function RegistrarAulaPage() {
   // Attendance lists: Record of studentId -> { presente: boolean; trouxe_biblia: boolean }
   const [attendance, setAttendance] = useState<Record<string, { presente: boolean; trouxe_biblia: boolean }>>({});
 
-  const activeClasses = store.classes.filter((c) => c.status === "ATIVA");
+  // Auth State
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string>("STUDENT");
+
+  useEffect(() => {
+    async function loadAuth() {
+      if (isSupabaseConfigured && supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setCurrentUserId(session.user.id);
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+        }
+      } else {
+        setCurrentUserRole("ADMIN");
+      }
+    }
+    loadAuth();
+  }, []);
+
+  const activeClasses = store.classes.filter((c) => {
+    if (c.status !== "ATIVA") return false;
+    if (currentUserRole === "ADMIN") return true;
+    if (currentUserRole === "TEACHER" && c.professor_id === currentUserId) return true;
+    return false;
+  });
 
   const handleSelectClass = (classId: string) => {
     setSelectedClassId(classId);

@@ -8,6 +8,7 @@ import {
   Classe,
 } from "@/lib/store";
 import { useState, useEffect } from "react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { z } from "zod";
 import {
   Users,
@@ -121,6 +122,42 @@ function PessoasPage() {
   const [observacoes, setObservacoes] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Auth State
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string>("STUDENT");
+
+  useEffect(() => {
+    async function loadAuth() {
+      if (isSupabaseConfigured && supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setCurrentUserId(session.user.id);
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+        }
+      } else {
+        // Fallback para demo
+        setCurrentUserRole("ADMIN");
+      }
+    }
+    loadAuth();
+  }, []);
+
+  // Helper de Permissão
+  const canManageStudent = (aluno: Aluno | null = null) => {
+    if (currentUserRole === "ADMIN") return true;
+    if (currentUserRole === "TEACHER") {
+      if (!aluno) return true; 
+      const targetClass = store.classes.find(c => c.id === aluno.classe_id);
+      if (targetClass && targetClass.professor_id === currentUserId) return true;
+    }
+    return false;
+  };
 
   // Auto-filter by class if query param exists
   useEffect(() => {
@@ -435,13 +472,15 @@ function PessoasPage() {
           </h3>
           <p className="text-xs text-slate-500 font-medium">Controle de matrículas, professores, auxiliares e visitantes.</p>
         </div>
-        <Button
-          onClick={handleOpenCreate}
-          className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft hidden sm:flex"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Cadastrar Pessoa</span>
-        </Button>
+        {canManageStudent() && (
+          <Button
+            onClick={handleOpenCreate}
+            className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft hidden sm:flex"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Cadastrar Pessoa</span>
+          </Button>
+        )}
       </div>
 
       {/* Search and Filters Bar */}
@@ -616,12 +655,14 @@ function PessoasPage() {
           <p className="text-xs text-slate-400 max-w-xs mt-1.5 leading-relaxed font-medium">
             Registre participantes e atribua funções (alunos, professores, administradores).
           </p>
-          <Button
-            onClick={handleOpenCreate}
-            className="mt-5 bg-primary hover:bg-primary/95 text-white text-xs font-semibold rounded-xl px-5 py-2 cursor-pointer shadow-soft"
-          >
-            Cadastrar Primeira Pessoa
-          </Button>
+          {canManageStudent() && (
+            <Button
+              onClick={handleOpenCreate}
+              className="mt-5 bg-primary hover:bg-primary/95 text-white text-xs font-semibold rounded-xl px-5 py-2 cursor-pointer shadow-soft"
+            >
+              Cadastrar Primeira Pessoa
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -704,27 +745,31 @@ function PessoasPage() {
                               <Eye className="h-3.5 w-3.5 text-slate-400" />
                               Visualizar
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleOpenEdit(p)}
-                              className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                            >
-                              <Edit2 className="h-3.5 w-3.5 text-slate-400" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleToggleStatus(p)}
-                              className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                            >
-                              <User className="h-3.5 w-3.5 text-slate-400" />
-                              {p.status === "INATIVO" ? "Reativar" : "Inativar"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeletingPessoaId(p.id)}
-                              className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                              Excluir
-                            </DropdownMenuItem>
+                            {canManageStudent(p) && (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() => handleOpenEdit(p)}
+                                  className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  <Edit2 className="h-3.5 w-3.5 text-slate-400" />
+                                  Editar
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleToggleStatus(p)}
+                                  className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  <User className="h-3.5 w-3.5 text-slate-400" />
+                                  {p.status === "INATIVO" ? "Reativar" : "Inativar"}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => setDeletingPessoaId(p.id)}
+                                  className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                                  Excluir
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

@@ -8,6 +8,8 @@ export interface Classe {
   faixa_etaria: string | null;
   professor: string;
   professor_auxiliar: string | null;
+  professor_id?: string | null;
+  professor_auxiliar_id?: string | null;
   sala: string | null;
   cor: string | null;
   status: "ATIVA" | "INATIVA";
@@ -38,6 +40,7 @@ export interface Curso {
   nome: string;
   descricao: string | null;
   professor: string | null;
+  professor_id?: string | null;
   carga_horaria: number | null;
   data_inicio: string | null;
   data_fim: string | null;
@@ -67,6 +70,7 @@ export interface Aula {
   tema: string;
   numero_licao: number | null;
   professor: string | null;
+  professor_id?: string | null;
   professor_substituto: string | null;
   observacoes: string | null;
   presencas: Record<string, Presenca>; // aluno_id -> Presenca
@@ -493,6 +497,8 @@ export async function syncFromSupabase() {
         faixa_etaria: c.faixa_etaria,
         professor: c.professor,
         professor_auxiliar: c.professor_auxiliar,
+        professor_id: c.professor_id,
+        professor_auxiliar_id: c.professor_auxiliar_id,
         sala: c.sala,
         cor: c.cor,
         status: c.status,
@@ -510,6 +516,7 @@ export async function syncFromSupabase() {
         nome: c.nome,
         descricao: c.descricao,
         professor: c.professor,
+        professor_id: c.professor_id,
         carga_horaria: c.carga_horaria,
         data_inicio: c.data_inicio,
         data_fim: c.data_fim,
@@ -551,6 +558,7 @@ export async function syncFromSupabase() {
         tema: a.tema,
         numero_licao: a.numero_licao,
         professor: a.professor,
+        professor_id: a.professor_id,
         professor_substituto: a.professor_substituto,
         observacoes: a.observacoes,
         presencas: presencasMap[a.id] || {},

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEbdStore, deleteAula, Aula } from "@/lib/store";
-import { useState } from "react";
+import { useEbdStore, deleteAula, Aula, Classe } from "@/lib/store";
+import { useState, useEffect } from "react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   CalendarCheck,
   Plus,
@@ -40,6 +41,38 @@ function AulasPage() {
   const store = useEbdStore();
   const [deletingAulaId, setDeletingAulaId] = useState<string | null>(null);
 
+  // Auth State
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string>("STUDENT");
+
+  useEffect(() => {
+    async function loadAuth() {
+      if (isSupabaseConfigured && supabase) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          setCurrentUserId(session.user.id);
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", session.user.id)
+            .maybeSingle();
+          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+        }
+      } else {
+        // Fallback para demo
+        setCurrentUserRole("ADMIN");
+      }
+    }
+    loadAuth();
+  }, []);
+
+  // Helper de Permissão
+  const canManageAula = (aulaClass: Classe | undefined) => {
+    if (currentUserRole === "ADMIN") return true;
+    if (currentUserRole === "TEACHER" && aulaClass && aulaClass.professor_id === currentUserId) return true;
+    return false;
+  };
+
   const handleDeleteConfirm = () => {
     if (deletingAulaId) {
       try {
@@ -65,15 +98,17 @@ function AulasPage() {
           <h3 className="text-xl font-bold text-slate-800 tracking-tight">Histórico de Aulas</h3>
           <p className="text-xs text-slate-500 font-medium">Veja as aulas lecionadas e chamadas anteriores.</p>
         </div>
-        <Button
-          asChild
-          className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft"
-        >
-          <Link to="/aulas/registrar">
-            <Plus className="h-4 w-4" />
-            <span>Registrar Aula</span>
-          </Link>
-        </Button>
+        {(currentUserRole === "ADMIN" || currentUserRole === "TEACHER") && (
+          <Button
+            asChild
+            className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 h-9 px-4 cursor-pointer shadow-soft"
+          >
+            <Link to="/aulas/registrar">
+              <Plus className="h-4 w-4" />
+              <span>Registrar Aula</span>
+            </Link>
+          </Button>
+        )}
       </div>
 
       {/* Aulas List */}
@@ -86,12 +121,14 @@ function AulasPage() {
           <p className="text-xs text-slate-400 max-w-xs mt-1.5 leading-relaxed font-medium">
             Registre sua primeira aula dominical e faça a chamada dos alunos.
           </p>
-          <Button
-            asChild
-            className="mt-5 bg-primary hover:bg-primary/95 text-white text-xs font-semibold rounded-xl px-5 py-2 cursor-pointer shadow-soft"
-          >
-            <Link to="/aulas/registrar">Registrar Primeira Aula</Link>
-          </Button>
+          {(currentUserRole === "ADMIN" || currentUserRole === "TEACHER") && (
+            <Button
+              asChild
+              className="mt-5 bg-primary hover:bg-primary/95 text-white text-xs font-semibold rounded-xl px-5 py-2 cursor-pointer shadow-soft"
+            >
+              <Link to="/aulas/registrar">Registrar Primeira Aula</Link>
+            </Button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
@@ -149,26 +186,28 @@ function AulasPage() {
                       <span>{bibleCount} Bíb.</span>
                     </div>
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 cursor-pointer"
-                        >
-                          <MoreVertical className="h-4.5 w-4.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="rounded-xl border border-slate-100 shadow-elevated">
-                        <DropdownMenuItem
-                          onClick={() => setDeletingAulaId(aula.id)}
-                          className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                          Excluir Registro
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {canManageAula(aulaClass) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 cursor-pointer"
+                          >
+                            <MoreVertical className="h-4.5 w-4.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="rounded-xl border border-slate-100 shadow-elevated">
+                          <DropdownMenuItem
+                            onClick={() => setDeletingAulaId(aula.id)}
+                            className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                            Excluir Registro
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </CardContent>
               </Card>
