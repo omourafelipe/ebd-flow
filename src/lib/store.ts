@@ -44,6 +44,7 @@ export interface Curso {
   carga_horaria: number | null;
   data_inicio: string | null;
   data_fim: string | null;
+  dias_semana?: string[] | null;
   status: "PLANEJADO" | "EM_ANDAMENTO" | "CONCLUIDO" | "CANCELADO";
   created_at?: string;
   updated_at?: string;
@@ -520,6 +521,7 @@ export async function syncFromSupabase() {
         carga_horaria: c.carga_horaria,
         data_inicio: c.data_inicio,
         data_fim: c.data_fim,
+        dias_semana: (c as any).dias_semana || null,
         status: c.status as Curso["status"],
       })) as Curso[];
     }
@@ -1012,6 +1014,8 @@ export function addCurso(curso: Omit<Curso, "id">) {
         data_inicio: curso.data_inicio,
         data_fim: curso.data_fim,
         status: curso.status,
+        // @ts-ignore - campo será criado no supabase futuramente
+        dias_semana: curso.dias_semana,
       }).then(({ error }) => {
         if (error) console.error("Error syncing addCurso:", error);
       });
@@ -1038,6 +1042,8 @@ export function updateCurso(curso: Curso) {
         data_inicio: curso.data_inicio,
         data_fim: curso.data_fim,
         status: curso.status,
+        // @ts-ignore
+        dias_semana: curso.dias_semana,
       }).eq("id", curso.id).then(({ error }) => {
         if (error) console.error("Error syncing updateCurso:", error);
       });

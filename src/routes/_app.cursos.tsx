@@ -114,6 +114,7 @@ function CursosPage() {
   const [cargaHoraria, setCargaHoraria] = useState<number | "">("");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
+  const [diasSemana, setDiasSemana] = useState<string[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -187,6 +188,7 @@ function CursosPage() {
     setCargaHoraria("");
     setDataInicio("");
     setDataFim("");
+    setDiasSemana([]);
     setErrors({});
     setIsFormOpen(true);
   };
@@ -200,6 +202,7 @@ function CursosPage() {
     setCargaHoraria(c.carga_horaria || "");
     setDataInicio(c.data_inicio || "");
     setDataFim(c.data_fim || "");
+    setDiasSemana(c.dias_semana || []);
     setErrors({});
     setIsFormOpen(true);
     setIsDetailsOpen(false);
@@ -229,6 +232,7 @@ function CursosPage() {
         carga_horaria: cargaHoraria === "" ? null : Number(cargaHoraria),
         data_inicio: dataInicio || null,
         data_fim: dataFim || null,
+        dias_semana: diasSemana.length > 0 ? diasSemana : null,
       };
 
       if (editingCurso) {
@@ -695,9 +699,8 @@ function CursosPage() {
                       <CardTitle className="text-sm font-bold text-slate-800 tracking-tight leading-snug truncate">
                         {c.nome}
                       </CardTitle>
-                      <CardDescription className="text-[10px] font-semibold text-slate-400 mt-1 flex items-center gap-1">
-                        <User className="h-3 w-3 text-slate-300" />
-                        <span className="truncate max-w-[150px]">{c.professor || "Sem professor"}</span>
+                      <CardDescription className="text-[11px] font-semibold text-slate-400 mt-0.5">
+                        {c.professor || "Sem professor"} • {details.totalParticipants} inscritos
                       </CardDescription>
                     </div>
 
@@ -750,13 +753,21 @@ function CursosPage() {
                       {c.descricao || "Sem descrição disponível para este curso."}
                     </p>
 
-                    <div className="border-t border-slate-50 pt-3 flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5 text-slate-300" />
-                        <span>{c.carga_horaria ? `${c.carga_horaria}h` : "N/D"}</span>
-                      </span>
-                      <span className="text-[11px] text-primary lowercase tracking-normal font-semibold">
-                        {details.totalParticipants} {details.totalParticipants === 1 ? "participante" : "participantes"}
+                    <div className="grid grid-cols-2 gap-2 mb-3 text-[11px] font-semibold text-slate-500">
+                      <div className="flex items-center gap-1 truncate">
+                        <Clock className="h-3 w-3" /> 
+                        {c.carga_horaria ? `${c.carga_horaria}h` : "--"}
+                      </div>
+                      <div className="flex items-center gap-1 truncate">
+                        <Calendar className="h-3 w-3" />
+                        {c.dias_semana && c.dias_semana.length > 0 ? c.dias_semana.join(", ") : "Não definido"}
+                      </div>
+                    </div>
+                    
+                    <div className="border-t border-slate-50 pt-3 flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase">
+                      <span>
+                        {c.data_inicio ? new Date(c.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR') : "--"} 
+                        {c.data_fim ? ` até ${new Date(c.data_fim + 'T00:00:00').toLocaleDateString('pt-BR')}` : ""}
                       </span>
                     </div>
                   </CardContent>
@@ -893,16 +904,44 @@ function CursosPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="fim" className="text-xs font-semibold text-slate-600">
-                  Data Final
-                </Label>
-                <Input
-                  id="fim"
-                  type="date"
-                  value={dataFim}
-                  onChange={(e) => setDataFim(e.target.value)}
-                  className="rounded-xl border-slate-200 text-xs py-5"
-                />
+                  <Label htmlFor="dataFim" className="text-xs font-semibold text-slate-600">
+                    Data Fim
+                  </Label>
+                  <Input
+                    id="dataFim"
+                    type="date"
+                    value={dataFim}
+                    onChange={(e) => setDataFim(e.target.value)}
+                    className="rounded-xl border-slate-200 text-xs py-5"
+                  />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-600">Dias da Semana</Label>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map(dia => (
+                  <Button
+                    key={dia}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (diasSemana.includes(dia)) {
+                        setDiasSemana(diasSemana.filter(d => d !== dia));
+                      } else {
+                        setDiasSemana([...diasSemana, dia]);
+                      }
+                    }}
+                    className={`h-8 rounded-lg text-[10px] font-semibold cursor-pointer ${
+                      diasSemana.includes(dia) 
+                        ? 'bg-primary text-white border-primary hover:bg-primary/90 hover:text-white' 
+                        : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                    }`}
+                  >
+                    {dia}
+                  </Button>
+                ))}
               </div>
             </div>
 
@@ -981,7 +1020,19 @@ function CursosPage() {
                     <Calendar className="h-4.5 w-4.5 text-slate-300" />
                     <div>
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5">Período Letivo</p>
-                      <p className="text-xs font-bold text-slate-700 leading-normal">{getCursoDetails(selectedCurso).period}</p>
+                      <div className="text-slate-800 font-bold text-xs">
+                        {selectedCurso.data_inicio ? new Date(selectedCurso.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR') : "Não definida"} 
+                        {selectedCurso.data_fim ? ` - ${new Date(selectedCurso.data_fim + 'T00:00:00').toLocaleDateString('pt-BR')}` : ""}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[9px] uppercase tracking-widest font-bold text-slate-400 mb-0.5">Dias da Semana</div>
+                    <div className="text-slate-700 font-bold text-xs">
+                      {selectedCurso.dias_semana && selectedCurso.dias_semana.length > 0 
+                        ? selectedCurso.dias_semana.join(", ") 
+                        : "Não definidos"}
                     </div>
                   </div>
 
