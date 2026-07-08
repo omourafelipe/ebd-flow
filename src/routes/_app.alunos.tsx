@@ -6,8 +6,10 @@ import {
   deleteAluno,
   Aluno,
   Classe,
+  Aula,
+  HistoricoClasse,
 } from "@/lib/store";
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
 import {
@@ -75,7 +77,7 @@ const searchSchema = z.object({
 });
 
 export const Route = createFileRoute("/_app/alunos")({
-  validateSearch: (search) => searchSchema.parse(search),
+  validateSearch: (search: Record<string, unknown>) => searchSchema.parse(search),
   component: AlunosPage,
 });
 
@@ -153,7 +155,7 @@ function AlunosPage() {
     if (currentUserRole === "ADMIN") return true;
     if (currentUserRole === "TEACHER") {
       if (!aluno) return true; 
-      const targetClass = store.classes.find(c => c.id === aluno.classe_id);
+      const targetClass = store.classes.find((c: Classe) => c.id === aluno.classe_id);
       if (targetClass && targetClass.professor_id === currentUserId) return true;
     }
     return false;
@@ -178,7 +180,7 @@ function AlunosPage() {
 
   useEffect(() => {
     if (search.detalhe) {
-      const p = store.alunos.find((a) => a.id === search.detalhe);
+      const p = store.alunos.find((a: Aluno) => a.id === search.detalhe);
       if (p) {
         setSelectedPessoa(p);
         setIsDetailsOpen(true);
@@ -190,7 +192,7 @@ function AlunosPage() {
   // Keep selectedPessoa in sync
   useEffect(() => {
     if (selectedPessoa) {
-      const updated = store.alunos.find((a) => a.id === selectedPessoa.id);
+      const updated = store.alunos.find((a: Aluno) => a.id === selectedPessoa.id);
       if (updated) {
         setSelectedPessoa(updated);
       }
@@ -206,7 +208,7 @@ function AlunosPage() {
     setEmail("");
     setEndereco("");
     // Default to first active class
-    const activeClasses = store.classes.filter((c) => c.status === "ATIVA");
+    const activeClasses = store.classes.filter((c: Classe) => c.status === "ATIVA");
     setClasseId(activeClasses.length > 0 ? activeClasses[0].id : "");
     setDataIngresso(new Date().toISOString().split("T")[0]);
     setFuncoes(["Aluno"]);
@@ -265,7 +267,7 @@ function AlunosPage() {
     // Duplicate check: name and telephone
     if (nome.trim() && telefone.trim()) {
       const exists = store.alunos.some(
-        (a) =>
+        (a: Aluno) =>
           a.id !== editingPessoa?.id &&
           a.nome.trim().toLowerCase() === nome.trim().toLowerCase() &&
           a.telefone === telefone.trim()
@@ -334,7 +336,7 @@ function AlunosPage() {
 
   const handleRoleCheckboxChange = (role: string) => {
     if (funcoes.includes(role)) {
-      setFuncoes(funcoes.filter((f) => f !== role));
+      setFuncoes(funcoes.filter((f: string) => f !== role));
     } else {
       setFuncoes([...funcoes, role]);
     }
@@ -355,7 +357,7 @@ function AlunosPage() {
   };
 
   // Filters logic
-  const filteredPessoas = store.alunos.filter((a) => {
+  const filteredPessoas = store.alunos.filter((a: Aluno) => {
     // Only show students or visitors
     const isStudentOrVisitor = a.funcoes?.includes("Aluno") || a.funcoes?.includes("Visitante") || (!a.funcoes?.includes("Professor") && !a.funcoes?.includes("Professor Auxiliar") && !a.funcoes?.includes("Administrador"));
     if (!isStudentOrVisitor) return false;
@@ -385,8 +387,8 @@ function AlunosPage() {
     let valB: any = b[sortBy === "classe" ? "classe_id" : sortBy === "ingresso" ? "data_ingresso" : sortBy];
 
     if (sortBy === "classe") {
-      valA = store.classes.find((c) => c.id === a.classe_id)?.nome || "";
-      valB = store.classes.find((c) => c.id === b.classe_id)?.nome || "";
+      valA = store.classes.find((c: Classe) => c.id === a.classe_id)?.nome || "";
+      valB = store.classes.find((c: Classe) => c.id === b.classe_id)?.nome || "";
     }
 
     valA = (valA || "").toString().toLowerCase();
@@ -421,13 +423,13 @@ function AlunosPage() {
 
   // Details calculations
   const getPessoaStats = (p: Aluno) => {
-    const classAulas = store.aulas.filter((aula) => aula.classe_id === p.classe_id);
+    const classAulas = store.aulas.filter((aula: Aula) => aula.classe_id === p.classe_id);
     const totalAulas = classAulas.length;
 
     let presentCount = 0;
     let bibleCount = 0;
 
-    classAulas.forEach((aula) => {
+    classAulas.forEach((aula: Aula) => {
       const pres = aula.presencas[p.id];
       if (pres) {
         if (pres.presente) presentCount++;
@@ -448,8 +450,8 @@ function AlunosPage() {
 
   const getPessoaTimeline = (p: Aluno) => {
     return store.historico_classes
-      .filter((h) => h.aluno_id === p.id)
-      .sort((a, b) => new Date(b.data_evento).getTime() - new Date(a.data_evento).getTime());
+      .filter((h: HistoricoClasse) => h.aluno_id === p.id)
+      .sort((a: HistoricoClasse, b: HistoricoClasse) => new Date(b.data_evento).getTime() - new Date(a.data_evento).getTime());
   };
 
   const getStatusColor = (s: Aluno["status"]) => {
@@ -496,7 +498,7 @@ function AlunosPage() {
               type="text"
               placeholder="Pesquisar por nome, email ou telefone..."
               value={searchText}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setSearchText(e.target.value);
                 setCurrentPage(1);
               }}
@@ -521,7 +523,7 @@ function AlunosPage() {
               <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Função</Label>
               <select
                 value={filterRole}
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                   setFilterRole(e.target.value);
                   setCurrentPage(1);
                 }}
@@ -540,7 +542,7 @@ function AlunosPage() {
               <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</Label>
               <select
                 value={filterStatus}
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                   setFilterStatus(e.target.value);
                   setCurrentPage(1);
                 }}
@@ -557,14 +559,14 @@ function AlunosPage() {
               <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Classe</Label>
               <select
                 value={filterClass}
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                   setFilterClass(e.target.value);
                   setCurrentPage(1);
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-9 font-medium text-slate-700 focus:outline-none"
               >
                 <option value="all">Todas as Classes</option>
-                {store.classes.map((c) => (
+                {store.classes.map((c: Classe) => (
                   <option key={c.id} value={c.id}>
                     {c.nome}
                   </option>
@@ -576,7 +578,7 @@ function AlunosPage() {
               <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sexo</Label>
               <select
                 value={filterSex}
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                   setFilterSex(e.target.value);
                   setCurrentPage(1);
                 }}
@@ -592,7 +594,7 @@ function AlunosPage() {
               <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Faixa Etária</Label>
               <select
                 value={filterAgeGroup}
-                onChange={(e) => {
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                   setFilterAgeGroup(e.target.value);
                   setCurrentPage(1);
                 }}
@@ -686,7 +688,7 @@ function AlunosPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600">
                 {currentPessoas.map((p) => {
-                  const targetClass = store.classes.find((c) => c.id === p.classe_id);
+                  const targetClass = store.classes.find((c: Classe) => c.id === p.classe_id);
                   const formattedEntry = p.data_ingresso ? p.data_ingresso.split("-").reverse().join("/") : "N/D";
 
                   return (
@@ -698,10 +700,10 @@ function AlunosPage() {
                       }}
                       className="hover:bg-slate-50/50 cursor-pointer transition-colors duration-150"
                     >
-                      <td className="p-4 pl-6 font-bold text-slate-800">{p.nome}</td>
+                      <td className="p-4 font-bold text-slate-800">{p.nome}</td>
                       <td className="p-4">
                         <div className="flex flex-wrap gap-1">
-                          {p.funcoes?.map((f) => (
+                          {p.funcoes?.map((f: string) => (
                             <span
                               key={f}
                               className={`text-[9px] font-bold px-1.75 py-0.5 rounded-full ${
@@ -727,7 +729,7 @@ function AlunosPage() {
                         </span>
                       </td>
                       <td className="p-4">{formattedEntry}</td>
-                      <td className="p-4 pr-6 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td className="p-4 pr-6 text-right" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
@@ -787,10 +789,10 @@ function AlunosPage() {
           {/* Mobile Card List */}
           <div className="md:hidden grid grid-cols-1 gap-4">
             {currentPessoas.map((p) => {
-              const targetClass = store.classes.find((c) => c.id === p.classe_id);
+              const targetClass = store.classes.find((c: Classe) => c.id === p.classe_id);
               const initials = p.nome
                 .split(" ")
-                .map((n) => n[0])
+                .map((n: string) => n[0])
                 .slice(0, 2)
                 .join("")
                 .toUpperCase();
@@ -819,7 +821,7 @@ function AlunosPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                       <span className={`text-[9px] font-bold px-2 py-0.75 rounded-full ${getStatusColor(p.status)}`}>
                         {p.status}
                       </span>
@@ -872,7 +874,7 @@ function AlunosPage() {
 
                   <CardContent className="p-4 pt-2 flex flex-col gap-2">
                     <div className="flex flex-wrap gap-1 mb-1">
-                      {p.funcoes?.map((f) => (
+                      {p.funcoes?.map((f: string) => (
                         <span key={f} className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-slate-50 text-slate-500">
                           {f}
                         </span>
