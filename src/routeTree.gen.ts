@@ -9,38 +9,192 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthLoginRouteImport } from './routes/_auth.login'
+import { Route as AuthCadastroRouteImport } from './routes/_auth.cadastro'
+import { Route as AppRelatoriosRouteImport } from './routes/_app.relatorios'
+import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppCursosRouteImport } from './routes/_app.cursos'
+import { Route as AppConfiguracoesRouteImport } from './routes/_app.configuracoes'
+import { Route as AppClassesRouteImport } from './routes/_app.classes'
+import { Route as AppAulasRouteImport } from './routes/_app.aulas'
+import { Route as AppAlunosRouteImport } from './routes/_app.alunos'
+import { Route as AppAulasRegistrarRouteImport } from './routes/_app.aulas.registrar'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/_auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthLoginRoute = AuthLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthCadastroRoute = AuthCadastroRouteImport.update({
+  id: '/cadastro',
+  path: '/cadastro',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AppRelatoriosRoute = AppRelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCursosRoute = AppCursosRouteImport.update({
+  id: '/cursos',
+  path: '/cursos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppConfiguracoesRoute = AppConfiguracoesRouteImport.update({
+  id: '/configuracoes',
+  path: '/configuracoes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppClassesRoute = AppClassesRouteImport.update({
+  id: '/classes',
+  path: '/classes',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAulasRoute = AppAulasRouteImport.update({
+  id: '/aulas',
+  path: '/aulas',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAlunosRoute = AppAlunosRouteImport.update({
+  id: '/alunos',
+  path: '/alunos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAulasRegistrarRoute = AppAulasRegistrarRouteImport.update({
+  id: '/registrar',
+  path: '/registrar',
+  getParentRoute: () => AppAulasRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/alunos': typeof AppAlunosRoute
+  '/aulas': typeof AppAulasRouteWithChildren
+  '/classes': typeof AppClassesRoute
+  '/configuracoes': typeof AppConfiguracoesRoute
+  '/cursos': typeof AppCursosRoute
+  '/dashboard': typeof AppDashboardRoute
+  '/relatorios': typeof AppRelatoriosRoute
+  '/cadastro': typeof AuthCadastroRoute
+  '/login': typeof AuthLoginRoute
+  '/aulas/registrar': typeof AppAulasRegistrarRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/alunos': typeof AppAlunosRoute
+  '/aulas': typeof AppAulasRouteWithChildren
+  '/classes': typeof AppClassesRoute
+  '/configuracoes': typeof AppConfiguracoesRoute
+  '/cursos': typeof AppCursosRoute
+  '/dashboard': typeof AppDashboardRoute
+  '/relatorios': typeof AppRelatoriosRoute
+  '/cadastro': typeof AuthCadastroRoute
+  '/login': typeof AuthLoginRoute
+  '/aulas/registrar': typeof AppAulasRegistrarRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/_auth': typeof AuthRouteWithChildren
+  '/_app/alunos': typeof AppAlunosRoute
+  '/_app/aulas': typeof AppAulasRouteWithChildren
+  '/_app/classes': typeof AppClassesRoute
+  '/_app/configuracoes': typeof AppConfiguracoesRoute
+  '/_app/cursos': typeof AppCursosRoute
+  '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/relatorios': typeof AppRelatoriosRoute
+  '/_auth/cadastro': typeof AuthCadastroRoute
+  '/_auth/login': typeof AuthLoginRoute
+  '/_app/aulas/registrar': typeof AppAulasRegistrarRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/alunos'
+    | '/aulas'
+    | '/classes'
+    | '/configuracoes'
+    | '/cursos'
+    | '/dashboard'
+    | '/relatorios'
+    | '/cadastro'
+    | '/login'
+    | '/aulas/registrar'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/alunos'
+    | '/aulas'
+    | '/classes'
+    | '/configuracoes'
+    | '/cursos'
+    | '/dashboard'
+    | '/relatorios'
+    | '/cadastro'
+    | '/login'
+    | '/aulas/registrar'
+  id:
+    | '__root__'
+    | '/'
+    | '/_app'
+    | '/_auth'
+    | '/_app/alunos'
+    | '/_app/aulas'
+    | '/_app/classes'
+    | '/_app/configuracoes'
+    | '/_app/cursos'
+    | '/_app/dashboard'
+    | '/_app/relatorios'
+    | '/_auth/cadastro'
+    | '/_auth/login'
+    | '/_app/aulas/registrar'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  AuthRoute: typeof AuthRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +202,129 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_auth/login': {
+      id: '/_auth/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/cadastro': {
+      id: '/_auth/cadastro'
+      path: '/cadastro'
+      fullPath: '/cadastro'
+      preLoaderRoute: typeof AuthCadastroRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_app/relatorios': {
+      id: '/_app/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof AppRelatoriosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/dashboard': {
+      id: '/_app/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/cursos': {
+      id: '/_app/cursos'
+      path: '/cursos'
+      fullPath: '/cursos'
+      preLoaderRoute: typeof AppCursosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/configuracoes': {
+      id: '/_app/configuracoes'
+      path: '/configuracoes'
+      fullPath: '/configuracoes'
+      preLoaderRoute: typeof AppConfiguracoesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/classes': {
+      id: '/_app/classes'
+      path: '/classes'
+      fullPath: '/classes'
+      preLoaderRoute: typeof AppClassesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/aulas': {
+      id: '/_app/aulas'
+      path: '/aulas'
+      fullPath: '/aulas'
+      preLoaderRoute: typeof AppAulasRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/alunos': {
+      id: '/_app/alunos'
+      path: '/alunos'
+      fullPath: '/alunos'
+      preLoaderRoute: typeof AppAlunosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/aulas/registrar': {
+      id: '/_app/aulas/registrar'
+      path: '/registrar'
+      fullPath: '/aulas/registrar'
+      preLoaderRoute: typeof AppAulasRegistrarRouteImport
+      parentRoute: typeof AppAulasRoute
+    }
   }
 }
 
+interface AppAulasRouteChildren {
+  AppAulasRegistrarRoute: typeof AppAulasRegistrarRoute
+}
+
+const AppAulasRouteChildren: AppAulasRouteChildren = {
+  AppAulasRegistrarRoute: AppAulasRegistrarRoute,
+}
+
+const AppAulasRouteWithChildren = AppAulasRoute._addFileChildren(
+  AppAulasRouteChildren,
+)
+
+interface AppRouteChildren {
+  AppAlunosRoute: typeof AppAlunosRoute
+  AppAulasRoute: typeof AppAulasRouteWithChildren
+  AppClassesRoute: typeof AppClassesRoute
+  AppConfiguracoesRoute: typeof AppConfiguracoesRoute
+  AppCursosRoute: typeof AppCursosRoute
+  AppDashboardRoute: typeof AppDashboardRoute
+  AppRelatoriosRoute: typeof AppRelatoriosRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAlunosRoute: AppAlunosRoute,
+  AppAulasRoute: AppAulasRouteWithChildren,
+  AppClassesRoute: AppClassesRoute,
+  AppConfiguracoesRoute: AppConfiguracoesRoute,
+  AppCursosRoute: AppCursosRoute,
+  AppDashboardRoute: AppDashboardRoute,
+  AppRelatoriosRoute: AppRelatoriosRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
+interface AuthRouteChildren {
+  AuthCadastroRoute: typeof AuthCadastroRoute
+  AuthLoginRoute: typeof AuthLoginRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthCadastroRoute: AuthCadastroRoute,
+  AuthLoginRoute: AuthLoginRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  AuthRoute: AuthRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
