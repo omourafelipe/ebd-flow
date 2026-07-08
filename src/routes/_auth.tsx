@@ -1,11 +1,11 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { BookOpen } from "lucide-react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_auth")({
   beforeLoad: async () => {
     // If Supabase is configured, check if we have an active session
-    if (isSupabaseConfigured && supabase) {
+    if (supabase) {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         throw redirect({ to: "/dashboard" });

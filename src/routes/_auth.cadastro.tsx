@@ -1,11 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, EyeOff, Lock, Mail, User, UserPlus, ShieldAlert } from "lucide-react";
+import { Eye, EyeOff, Lock, Mail, User, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import {
   Select,
@@ -42,38 +42,29 @@ function CadastroPage() {
 
     setLoading(true);
 
-    if (isSupabaseConfigured && supabase) {
-      try {
-        const { error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            data: {
-              nome: nome.trim(),
-              role: role,
-            },
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            nome: nome.trim(),
+            role: role,
           },
-        });
+        },
+      });
 
-        if (error) {
-          toast.error(error.message);
-        } else {
-          toast.success("Conta criada! Confirme seu e-mail ou faça login.");
-          navigate({ to: "/login" });
-        }
-      } catch (err: any) {
-        toast.error("Erro inesperado durante o cadastro.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      // Offline fallback / Demo Mode
-      setTimeout(() => {
-        setLoading(false);
-        toast.success("Usuário cadastrado com sucesso (Demonstração Local)!");
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success("Conta criada! Confirme seu e-mail ou faça login.");
         navigate({ to: "/login" });
-      }, 800);
+      }
+    } catch (err: any) {
+      toast.error("Erro inesperado durante o cadastro.");
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 

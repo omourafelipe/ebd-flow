@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase, isSupabaseConfigured } from "./supabase";
+import { supabase } from "./supabase";
 
 export interface Classe {
   id: string;
@@ -463,7 +463,7 @@ function generateUUID() {
 }
 
 export async function syncFromSupabase() {
-  if (!isSupabaseConfigured || !supabase) return;
+  if (!supabase) return;
   const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
   if (isDemo) return;
 
@@ -501,9 +501,9 @@ export async function syncFromSupabase() {
         professor_auxiliar_id: c.professor_auxiliar_id,
         sala: c.sala,
         cor: c.cor,
-        status: c.status,
+        status: c.status as Classe["status"],
         observacoes: c.observacoes,
-      }));
+      })) as Classe[];
     }
 
     if (alunos) {
@@ -520,8 +520,8 @@ export async function syncFromSupabase() {
         carga_horaria: c.carga_horaria,
         data_inicio: c.data_inicio,
         data_fim: c.data_fim,
-        status: c.status,
-      }));
+        status: c.status as Curso["status"],
+      })) as Curso[];
     }
 
     if (enrollments) {
@@ -571,10 +571,10 @@ export async function syncFromSupabase() {
         aluno_id: h.aluno_id,
         classe_origem_id: h.classe_origem_id,
         classe_destino_id: h.classe_destino_id,
-        tipo: h.tipo,
+        tipo: h.tipo as HistoricoClasse["tipo"],
         motivo: h.motivo,
         data_evento: h.data_evento,
-      }));
+      })) as HistoricoClasse[];
     }
 
     saveEbdStore(store);
@@ -717,7 +717,7 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       // Serialize observations for Supabase
@@ -830,7 +830,7 @@ export function updateAluno(aluno: Aluno) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       // Serialize observations for Supabase
@@ -878,7 +878,7 @@ export function deleteAluno(id: string) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("alunos").delete().eq("id", id).then(({ error }) => {
@@ -904,7 +904,7 @@ export function addClasse(classe: Omit<Classe, "id">) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("classes").insert({
@@ -939,7 +939,7 @@ export function updateClasse(classe: Classe) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("classes").update({
@@ -978,7 +978,7 @@ export function deleteClasse(id: string) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("classes").delete().eq("id", id).then(({ error }) => {
@@ -1000,7 +1000,7 @@ export function addCurso(curso: Omit<Curso, "id">) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("courses").insert({
@@ -1027,7 +1027,7 @@ export function updateCurso(curso: Curso) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("courses").update({
@@ -1058,7 +1058,7 @@ export function deleteCurso(id: string) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("courses").delete().eq("id", id).then(({ error }) => {
@@ -1102,7 +1102,7 @@ export function matricularAlunoCurso(cursoId: string, alunoId: string) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("curso_aluno").insert({
@@ -1125,7 +1125,7 @@ export function desmatricularAlunoCurso(cursoId: string, alunoId: string) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("curso_aluno").delete().eq("curso_id", cursoId).eq("aluno_id", alunoId).then(({ error }) => {
@@ -1163,7 +1163,7 @@ export function addAula(aula: Omit<Aula, "id">) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("aulas").insert({
@@ -1206,7 +1206,7 @@ export function deleteAula(id: string) {
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("aulas").delete().eq("id", id).then(({ error }) => {
@@ -1224,7 +1224,7 @@ export function updateConfiguracoes(igrejaNome: string, anoLetivo: number = 2026
   saveEbdStore(store);
 
   // Sync to Supabase
-  if (isSupabaseConfigured && supabase) {
+  if (supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
       supabase.from("configuracoes").update({
