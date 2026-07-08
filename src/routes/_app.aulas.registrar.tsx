@@ -77,10 +77,13 @@ function RegistrarAulaPage() {
   const handleSelectClass = (classId: string) => {
     setSelectedClassId(classId);
 
-    // Filter students for this class and initialize attendance state
-    const classStudents = store.alunos.filter(
-      (a) => a.classe_id === classId && (a.status === "ATIVO" || a.status === "VISITANTE"),
-    );
+    // Filter students for this class using active matriculas
+    const classStudents = store.alunos.filter((a) => {
+      const hasActiveMat = store.matriculas.some(
+        (m) => m.aluno_id === a.id && m.classe_id === classId && m.situacao === "ATIVO"
+      );
+      return hasActiveMat || a.status === "VISITANTE";
+    });
 
     const initialAttendance: Record<string, { presente: boolean; trouxe_biblia: boolean }> = {};
     classStudents.forEach((student) => {

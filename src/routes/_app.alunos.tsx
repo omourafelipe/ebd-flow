@@ -4,10 +4,13 @@ import {
   addAluno,
   updateAluno,
   deleteAluno,
+  transferirAluno,
+  encerrarMatricula,
   Aluno,
   Classe,
   Aula,
   HistoricoClasse,
+  Matricula,
 } from "@/lib/store";
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -122,6 +125,18 @@ function AlunosPage() {
   const [funcoes, setFuncoes] = useState<string[]>(["Aluno"]);
   const [status, setStatus] = useState<"ATIVO" | "VISITANTE" | "INATIVO">("ATIVO");
   const [observacoes, setObservacoes] = useState("");
+
+  // Transfer states
+  const [isTransferOpen, setIsTransferOpen] = useState(false);
+  const [transferDestClassId, setTransferDestClassId] = useState("");
+  const [transferDate, setTransferDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [transferReason, setTransferReason] = useState("");
+
+  // End matricula states
+  const [isEndMatriculaOpen, setIsEndMatriculaOpen] = useState(false);
+  const [endMatriculaDate, setEndMatriculaDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [endMatriculaReason, setEndMatriculaReason] = useState("");
+  const [endMatriculaStatus, setEndMatriculaStatus] = useState<"INATIVO" | "CONCLUIDO" | "FALECIDO">("INATIVO");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -331,6 +346,48 @@ function AlunosPage() {
         toast.error(err.message || "Erro ao excluir.");
         setDeletingPessoaId(null);
       }
+    }
+  };
+
+  const handleTransferSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPessoa) return;
+    if (!transferDestClassId) {
+      toast.error("Por favor, selecione a classe de destino.");
+      return;
+    }
+    try {
+      transferirAluno(
+        selectedPessoa.id,
+        selectedPessoa.classe_id || null,
+        transferDestClassId,
+        transferDate,
+        transferReason || "Transferência de classe solicitada pela administração."
+      );
+      toast.success("Aluno transferido com sucesso!");
+      setIsTransferOpen(false);
+      setIsDetailsOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao realizar transferência.");
+    }
+  };
+
+  const handleEndMatriculaSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedPessoa || !selectedPessoa.classe_id) return;
+    try {
+      encerrarMatricula(
+        selectedPessoa.id,
+        selectedPessoa.classe_id,
+        endMatriculaStatus,
+        endMatriculaDate,
+        endMatriculaReason || `Matrícula encerrada. Motivo: ${endMatriculaStatus}.`
+      );
+      toast.success("Matrícula encerrada com sucesso!");
+      setIsEndMatriculaOpen(false);
+      setIsDetailsOpen(false);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao encerrar matrícula.");
     }
   };
 
@@ -1255,8 +1312,9 @@ function AlunosPage() {
 
               {/* Tabs for Timeline History logs */}
               <Tabs defaultValue="moves" className="w-full">
-                <TabsList className="grid w-full grid-cols-1 bg-slate-100 rounded-xl p-1 h-10">
-                  <TabsTrigger value="moves" className="rounded-lg text-[11px] font-semibold">Jornada & Movimentações</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-2 bg-slate-100 rounded-xl p-1 h-10 flex-shrink-0">
+                  <TabsTrigger value="moves" className="rounded-lg text-[11px] font-semibold">Jornada</TabsTrigger>
+                  <TabsTrigger value="matriculas" className="rounded-lg text-[11px] font-semibold">Matrículas</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="moves" className="mt-3">
@@ -1296,6 +1354,69 @@ function AlunosPage() {
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="matriculas" className="mt-3 space-y-3">
+                  {store.matriculas.filter((m) => m.aluno_id === selectedPessoa.id).length === 0 ? (
+                    <div className="bg-white p-6 rounded-xl shadow-soft text-center text-slate-400 text-xs font-semibold">
+                      Nenhuma matrícula registrada.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {store.matriculas
+                        .filter((m) => m.aluno_id === selectedPessoa.id)
+                        .map((m) => {
+                          const cls = store.classes.find((c) => c.id === m.classe_id);
+                          const formattedStart = m.data_matricula.split("-").reverse().join("/");
+                          const formattedEnd = m.data_saida ? m.data_saida.split("-").reverse().join("/") : null;
+                          return (
+                            <div key={m.id} className="bg-white p-4 rounded-xl shadow-soft border border-slate-50 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="font-bold text-slate-800 text-xs">{cls ? cls.nome : "Classe Removida"}</span>
+                                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                  m.situacao === "ATIVO" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"
+                                }`}>
+                                  {m.situacao}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 font-semibold">Matrícula: {formattedStart}</p>
+                              {formattedEnd && (
+                                <p className="text-[10px] text-slate-500 font-semibold">
+                                  Saída: {formattedEnd} — Motivo: {m.motivo_saida || "Não informado"}
+                                </p>
+                              )}
+                              {m.situacao === "ATIVO" && canManageStudent() && (
+                                <div className="flex gap-2 pt-2 border-t border-slate-50 mt-1">
+                                  <Button
+                                    type="button"
+                                    onClick={() => {
+                                      setTransferDestClassId("");
+                                      setTransferReason("");
+                                      setIsTransferOpen(true);
+                                    }}
+                                    className="h-7 bg-primary/5 hover:bg-primary/10 text-primary text-[10px] font-bold rounded-lg px-2.5 cursor-pointer flex items-center gap-1"
+                                  >
+                                    <ArrowRightLeft className="h-3 w-3" />
+                                    Transferir
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={() => {
+                                      setEndMatriculaReason("");
+                                      setIsEndMatriculaOpen(true);
+                                    }}
+                                    className="h-7 bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-bold rounded-lg px-2.5 cursor-pointer flex items-center gap-1 border border-red-100"
+                                  >
+                                    <X className="h-3 w-3" />
+                                    Encerrar
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                     </div>
                   )}
                 </TabsContent>
@@ -1349,6 +1470,171 @@ function AlunosPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* TRANSFER CLASS DIALOG */}
+      <Dialog open={isTransferOpen} onOpenChange={setIsTransferOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-elevated overflow-y-auto max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <ArrowRightLeft className="h-5 w-5 text-primary" />
+              Transferência de Classe
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400 font-medium">
+              Transfira o aluno para outra classe. A matrícula anterior será encerrada como TRANSFERIDO e uma nova matrícula ativa será criada.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleTransferSubmit} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="transferDestClass" className="text-xs font-semibold text-slate-600">
+                Classe de Destino *
+              </Label>
+              <select
+                id="transferDestClass"
+                value={transferDestClassId}
+                onChange={(e) => setTransferDestClassId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-10 font-medium text-slate-700 focus:outline-none"
+                required
+              >
+                <option value="">Selecione a nova classe</option>
+                {store.classes
+                  .filter((c) => c.id !== selectedPessoa?.classe_id && c.status === "ATIVA")
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome} (Vagas: {(c.capacidade || 30) - store.matriculas.filter(m => m.classe_id === c.id && m.situacao === "ATIVO").length})
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="transferDate" className="text-xs font-semibold text-slate-600">
+                Data de Transferência *
+              </Label>
+              <Input
+                id="transferDate"
+                type="date"
+                value={transferDate}
+                onChange={(e) => setTransferDate(e.target.value)}
+                className="rounded-xl border-slate-200 text-xs py-5"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="transferReason" className="text-xs font-semibold text-slate-600">
+                Motivo da Transferência
+              </Label>
+              <textarea
+                id="transferReason"
+                value={transferReason}
+                onChange={(e) => setTransferReason(e.target.value)}
+                placeholder="Ex: Mudança de faixa etária, interesse em outro tema..."
+                rows={2.5}
+                className="w-full rounded-xl border border-slate-200 text-xs p-3 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+              />
+            </div>
+
+            <DialogFooter className="pt-4 flex flex-row items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsTransferOpen(false)}
+                className="rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer h-9 px-4"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="bg-primary hover:bg-primary/95 text-white font-semibold rounded-xl text-xs cursor-pointer h-9 px-4"
+              >
+                Confirmar Transferência
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* END MATRICULA DIALOG */}
+      <Dialog open={isEndMatriculaOpen} onOpenChange={setIsEndMatriculaOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-elevated overflow-y-auto max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <X className="h-5 w-5 text-red-500" />
+              Encerrar Matrícula
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400 font-medium">
+              Encerre a matrícula ativa do aluno nesta classe.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleEndMatriculaSubmit} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="endStatus" className="text-xs font-semibold text-slate-600">
+                Nova Situação do Aluno *
+              </Label>
+              <select
+                id="endStatus"
+                value={endMatriculaStatus}
+                onChange={(e) => setEndMatriculaStatus(e.target.value as any)}
+                className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-10 font-medium text-slate-700 focus:outline-none"
+                required
+              >
+                <option value="INATIVO">Inativo</option>
+                <option value="CONCLUIDO">Concluído (Curso finalizado)</option>
+                <option value="FALECIDO">Falecido</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="endDate" className="text-xs font-semibold text-slate-600">
+                Data de Saída *
+              </Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={endMatriculaDate}
+                onChange={(e) => setEndMatriculaDate(e.target.value)}
+                className="rounded-xl border-slate-200 text-xs py-5"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="endReason" className="text-xs font-semibold text-slate-600">
+                Motivo do Encerramento *
+              </Label>
+              <textarea
+                id="endReason"
+                value={endMatriculaReason}
+                onChange={(e) => setEndMatriculaReason(e.target.value)}
+                placeholder="Ex: Conclusão do ano letivo, mudança de cidade, etc."
+                rows={2.5}
+                className="w-full rounded-xl border border-slate-200 text-xs p-3 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-ring resize-none"
+                required
+              />
+            </div>
+
+            <DialogFooter className="pt-4 flex flex-row items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setIsEndMatriculaOpen(false)}
+                className="rounded-xl text-xs font-semibold hover:bg-slate-50 cursor-pointer h-9 px-4"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                className="bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl text-xs cursor-pointer h-9 px-4"
+              >
+                Confirmar Saída
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
     </div>
   );
 }

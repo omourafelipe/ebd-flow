@@ -101,7 +101,7 @@ function Dashboard() {
     setIsMounted(true);
   }, []);
 
-  const totalAlunos = store.alunos.filter((a) => a.status !== "INATIVO").length;
+  const totalAlunos = store.matriculas.filter((m) => m.situacao === "ATIVO").length;
   const visitantes = store.alunos.filter((a) => a.status === "VISITANTE").length;
   const cursosAtivos = store.cursos.filter((c) => c.status === "EM_ANDAMENTO").length;
   const classesAtivas = store.classes.filter((c) => c.status === "ATIVA").length;
@@ -133,7 +133,7 @@ function Dashboard() {
 
     store.classes.forEach((c) => {
       if (c.status !== "ATIVA") return;
-      const count = store.alunos.filter((a) => a.classe_id === c.id).length;
+      const count = store.matriculas.filter((m) => m.classe_id === c.id && m.situacao === "ATIVO").length;
       if (count === 0) {
         list.push({
           type: "warning",
@@ -144,9 +144,13 @@ function Dashboard() {
     });
 
     if (lastAula) {
+      const classActiveStudentIds = store.matriculas
+        .filter((m) => m.classe_id === lastAula.classe_id && m.situacao === "ATIVO")
+        .map((m) => m.aluno_id);
+
       const faltosos = store.alunos.filter(
         (a) =>
-          a.classe_id === lastAula.classe_id &&
+          classActiveStudentIds.includes(a.id) &&
           lastAula.presencas[a.id] &&
           !lastAula.presencas[a.id].presente,
       );
@@ -177,7 +181,7 @@ function Dashboard() {
     .filter((c) => c.status === "ATIVA")
     .map((c) => ({
       name: c.nome.split(/[—–-]/)[0].trim(),
-      Alunos: store.alunos.filter((a) => a.classe_id === c.id).length,
+      Alunos: store.matriculas.filter((m) => m.classe_id === c.id && m.situacao === "ATIVO").length,
     }));
 
   // Frequência histórica (últimas 5 aulas por data)

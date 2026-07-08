@@ -25,6 +25,8 @@ import {
   BookMarked,
   Search,
   Link,
+  ArrowUpDown,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -110,6 +112,8 @@ function ClassesPage() {
   const [cor, setCor] = useState("emerald");
   const [status, setStatus] = useState<"ATIVA" | "INATIVA">("ATIVA");
   const [observacoes, setObservacoes] = useState("");
+  const [cursoId, setCursoId] = useState("");
+  const [capacidade, setCapacidade] = useState("30");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -187,6 +191,8 @@ function ClassesPage() {
     setCor("emerald");
     setStatus("ATIVA");
     setObservacoes("");
+    setCursoId("");
+    setCapacidade("30");
     setErrors({});
     setIsFormOpen(true);
   };
@@ -204,6 +210,8 @@ function ClassesPage() {
     setCor(c.cor || "emerald");
     setStatus(c.status);
     setObservacoes(c.observacoes || "");
+    setCursoId(c.curso_id || "");
+    setCapacidade(c.capacidade?.toString() || "30");
     setErrors({});
     setIsFormOpen(true);
     setIsDetailsOpen(false);
@@ -231,6 +239,8 @@ function ClassesPage() {
     setCor(c.cor || "emerald");
     setStatus("ATIVA"); // default to ATIVA
     setObservacoes(c.observacoes || "");
+    setCursoId(c.curso_id || "");
+    setCapacidade(c.capacidade?.toString() || "30");
     setErrors({});
     setIsFormOpen(true);
     toast.success(`Campos copiados de ${c.nome}. Defina um nome único para salvar.`);
@@ -255,6 +265,10 @@ function ClassesPage() {
     if (!professorId) newErrors.professor = "O professor é obrigatório.";
     if (!faixaEtaria.trim()) newErrors.faixaEtaria = "A faixa etária é obrigatória.";
     if (!status) newErrors.status = "O status é obrigatório.";
+    if (!cursoId) newErrors.curso = "O curso associado é obrigatório.";
+    if (!capacidade || parseInt(capacidade) <= 0) {
+      newErrors.capacidade = "A capacidade deve ser maior que zero.";
+    }
 
     // Uniqueness check client-side
     const duplicate = store.classes.some(
@@ -293,6 +307,8 @@ function ClassesPage() {
         cor,
         status,
         observacoes: observacoes.trim() || null,
+        curso_id: cursoId || null,
+        capacidade: parseInt(capacidade) || 30,
       };
 
       if (editingClasse) {
@@ -360,8 +376,8 @@ function ClassesPage() {
     let valueB: any = b[sortBy === "alunos" ? "id" : sortBy];
 
     if (sortBy === "alunos") {
-      valueA = store.alunos.filter((al) => al.classe_id === a.id).length;
-      valueB = store.alunos.filter((al) => al.classe_id === b.id).length;
+      valueA = store.matriculas.filter((m) => m.classe_id === a.id && m.situacao === "ATIVO").length;
+      valueB = store.matriculas.filter((m) => m.classe_id === b.id && m.situacao === "ATIVO").length;
     } else {
       valueA = (valueA || "").toLowerCase();
       valueB = (valueB || "").toLowerCase();
@@ -428,17 +444,8 @@ function ClassesPage() {
 
   // Get details information
   const getClasseDetails = (c: Classe) => {
-    const classStudents = store.alunos.filter((a) => a.classe_id === c.id);
-    const totalStudents = classStudents.length;
-
-    // Cursos vinculados: courses that have at least one student from this class enrolled
-    const studentIds = classStudents.map((s) => s.id);
-    const enrolledCourseIds = store.curso_aluno
-      .filter((ca) => studentIds.includes(ca.aluno_id))
-      .map((ca) => ca.curso_id);
-    const linkedCourses = store.cursos.filter((course) =>
-      enrolledCourseIds.includes(course.id) || course.professor === c.professor
-    );
+    const totalStudents = store.matriculas.filter((m) => m.classe_id === c.id && m.situacao === "ATIVO").length;
+    const linkedCourse = store.cursos.find((course) => course.id === c.curso_id) || null;
 
     // Última aula registrada
     const classLessons = store.aulas
@@ -448,7 +455,7 @@ function ClassesPage() {
 
     return {
       totalStudents,
-      linkedCourses,
+      linkedCourse,
       lastLesson,
     };
   };
@@ -678,11 +685,20 @@ function ClassesPage() {
                         <div className={`h-3 w-3 rounded-full ${getCorIndicator(c.cor)}`} />
                       </td>
                       <td className="p-4 font-bold text-slate-800">{c.nome}</td>
-                      <td className="p-4">{c.departamento || "Geral"}</td>
+                      <td className="p-4">
+                        <div className="font-semibold text-slate-700">
+                          {store.cursos.find((cr) => cr.id === c.curso_id)?.nome || "Sem curso"}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {c.departamento || "Geral"}
+                        </div>
+                      </td>
                       <td className="p-4">{c.faixa_etaria || "Livre"}</td>
                       <td className="p-4">{c.professor}</td>
                       <td className="p-4">{c.sala || "Sem sala"}</td>
-                      <td className="p-4 text-center font-bold text-slate-800">{details.totalStudents}</td>
+                      <td className="p-4 text-center font-bold text-slate-800">
+                        {details.totalStudents} / {c.capacidade || 30}
+                      </td>
                       <td className="p-4 text-center">
                         <span
                           onClick={(e) => {
@@ -792,8 +808,8 @@ function ClassesPage() {
                       <CardTitle className="text-sm font-bold text-slate-800 tracking-tight leading-snug truncate">
                         {c.nome}
                       </CardTitle>
-                      <CardDescription className="text-[11px] font-semibold text-slate-400 mt-0.5">
-                        {details.totalStudents} {details.totalStudents === 1 ? "aluno" : "alunos"}
+                      <CardDescription className="text-[11px] font-semibold text-slate-450 mt-0.5 truncate max-w-[200px]">
+                        Curso: {store.cursos.find((cr) => cr.id === c.curso_id)?.nome || "Sem curso"}
                       </CardDescription>
                     </div>
 
@@ -863,7 +879,7 @@ function ClassesPage() {
                   <CardContent className="p-4 pt-2 pl-6 flex-1 flex flex-col justify-between">
                     <div className="grid grid-cols-2 gap-2 mb-3 text-[11px] font-semibold text-slate-500">
                       <div>Depto: {c.departamento || "Geral"}</div>
-                      <div>Idade: {c.faixa_etaria || "Livre"}</div>
+                      <div>Ocupação: {details.totalStudents} / {c.capacidade || 30}</div>
                     </div>
                     
                     <div className="border-t border-slate-50 pt-3 flex items-center justify-between text-[11px] text-slate-400 font-semibold">
@@ -948,6 +964,48 @@ function ClassesPage() {
                 }`}
               />
               {errors.nome && <p className="text-[10px] text-red-500 font-semibold">{errors.nome}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="curso" className="text-xs font-semibold text-slate-600">
+                  Curso Associado *
+                </Label>
+                <select
+                  id="curso"
+                  value={cursoId}
+                  onChange={(e) => setCursoId(e.target.value)}
+                  className={`w-full rounded-xl border bg-white text-xs px-3 h-10 font-medium text-slate-700 focus:outline-none ${
+                    errors.curso ? "border-red-400 focus-visible:ring-red-400" : "border-slate-200"
+                  }`}
+                >
+                  <option value="">Selecione um Curso</option>
+                  {store.cursos.map((cr) => (
+                    <option key={cr.id} value={cr.id}>
+                      {cr.nome}
+                    </option>
+                  ))}
+                </select>
+                {errors.curso && <p className="text-[10px] text-red-500 font-semibold">{errors.curso}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="capacidade" className="text-xs font-semibold text-slate-600">
+                  Capacidade (Alunos) *
+                </Label>
+                <Input
+                  id="capacidade"
+                  type="number"
+                  min="1"
+                  value={capacidade}
+                  onChange={(e) => setCapacidade(e.target.value)}
+                  placeholder="Ex: 30"
+                  className={`rounded-xl border-slate-200 text-xs py-5 ${
+                    errors.capacidade ? "border-red-400 focus-visible:ring-red-400" : ""
+                  }`}
+                />
+                {errors.capacidade && <p className="text-[10px] text-red-500 font-semibold">{errors.capacidade}</p>}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -1150,6 +1208,24 @@ function ClassesPage() {
                 </CardHeader>
                 <CardContent className="p-4 pt-0 space-y-3.5 text-xs font-semibold text-slate-600">
                   <div className="flex items-center gap-2.5 text-slate-500">
+                    <Layers className="h-4.5 w-4.5 text-slate-300" />
+                    <div>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5">Curso</p>
+                      <p className="text-xs font-bold text-slate-700 leading-normal">
+                        {store.cursos.find(cr => cr.id === selectedClasse.curso_id)?.nome || "Nenhum curso associado"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 text-slate-500">
+                    <Users className="h-4.5 w-4.5 text-slate-300" />
+                    <div>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5">Capacidade Máxima</p>
+                      <p className="text-xs font-bold text-slate-700 leading-normal">{selectedClasse.capacidade || 30} alunos</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 text-slate-500">
                     <User className="h-4.5 w-4.5 text-slate-300" />
                     <div>
                       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-0.5">Professor Titular</p>
@@ -1326,25 +1402,4 @@ function ClassesPage() {
   );
 }
 
-// Icon helper for refresh status (Import standard Lucide icon or fallback)
-function RefreshCw(props: any) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-      <path d="M21 3v5h-5" />
-      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-      <path d="M3 21v-5h5" />
-    </svg>
-  );
-}
+

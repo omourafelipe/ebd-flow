@@ -125,8 +125,10 @@ export type Database = {
       }
       classes: {
         Row: {
+          capacidade: number | null
           cor: string | null
           created_at: string
+          curso_id: string | null
           deleted_at: string | null
           departamento: string | null
           faixa_etaria: string | null
@@ -142,8 +144,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          capacidade?: number | null
           cor?: string | null
           created_at?: string
+          curso_id?: string | null
           deleted_at?: string | null
           departamento?: string | null
           faixa_etaria?: string | null
@@ -159,8 +163,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          capacidade?: number | null
           cor?: string | null
           created_at?: string
+          curso_id?: string | null
           deleted_at?: string | null
           departamento?: string | null
           faixa_etaria?: string | null
@@ -175,7 +181,15 @@ export type Database = {
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "classes_curso_id_fkey"
+            columns: ["curso_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       configuracoes: {
         Row: {
@@ -385,36 +399,93 @@ export type Database = {
           },
         ]
       }
+      matriculas: {
+        Row: {
+          aluno_id: string
+          classe_id: string
+          created_at: string
+          data_matricula: string
+          data_saida: string | null
+          id: string
+          motivo_saida: string | null
+          situacao: string
+          updated_at: string
+        }
+        Insert: {
+          aluno_id: string
+          classe_id: string
+          created_at?: string
+          data_matricula: string
+          data_saida?: string | null
+          id?: string
+          motivo_saida?: string | null
+          situacao?: string
+          updated_at?: string
+        }
+        Update: {
+          aluno_id?: string
+          classe_id?: string
+          created_at?: string
+          data_matricula?: string
+          data_saida?: string | null
+          id?: string
+          motivo_saida?: string | null
+          situacao?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "matriculas_aluno_id_fkey"
+            columns: ["aluno_id"]
+            isOneToOne: false
+            referencedRelation: "alunos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "matriculas_classe_id_fkey"
+            columns: ["classe_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       presencas: {
         Row: {
           aluno_id: string
           aula_id: string
           created_at: string
+          falta_justificada: boolean | null
           id: string
           observacoes: string | null
           presente: boolean
           trouxe_biblia: boolean
           updated_at: string
+          visitante: boolean | null
         }
         Insert: {
           aluno_id: string
           aula_id: string
           created_at?: string
+          falta_justificada?: boolean | null
           id?: string
           observacoes?: string | null
           presente?: boolean
           trouxe_biblia?: boolean
           updated_at?: string
+          visitante?: boolean | null
         }
         Update: {
           aluno_id?: string
           aula_id?: string
           created_at?: string
+          falta_justificada?: boolean | null
           id?: string
           observacoes?: string | null
           presente?: boolean
           trouxe_biblia?: boolean
           updated_at?: string
+          visitante?: boolean | null
         }
         Relationships: [
           {

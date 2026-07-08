@@ -14,13 +14,15 @@ export interface Classe {
   cor: string | null;
   status: "ATIVA" | "INATIVA";
   observacoes: string | null;
+  curso_id?: string | null;
+  capacidade?: number | null;
   created_at?: string;
   updated_at?: string;
 }
 
 export interface Aluno {
   id: string;
-  classe_id: string;
+  classe_id: string; // Maintain for backwards compatibility/UI state, but use matriculas as source of truth
   nome: string;
   sexo: "MASCULINO" | "FEMININO" | null;
   telefone: string | null;
@@ -58,10 +60,24 @@ export interface CursoAluno {
   created_at?: string;
 }
 
+export interface Matricula {
+  id: string;
+  aluno_id: string;
+  classe_id: string;
+  data_matricula: string;
+  situacao: "ATIVO" | "INATIVO" | "TRANSFERIDO" | "CONCLUIDO" | "FALECIDO";
+  data_saida?: string | null;
+  motivo_saida?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Presenca {
   presente: boolean;
   trouxe_biblia: boolean;
   observacoes?: string | null;
+  falta_justificada?: boolean; // Support for justified absences
+  visitante?: boolean;
 }
 
 export interface Aula {
@@ -117,6 +133,7 @@ export interface EbdStoreData {
   curso_aluno: CursoAluno[];
   aulas: Aula[];
   historico_classes: HistoricoClasse[];
+  matriculas: Matricula[];
 }
 
 export function deserializeAluno(a: any): Aluno {
@@ -188,6 +205,8 @@ const DEFAULT_DATA: EbdStoreData = {
       cor: "emerald",
       status: "ATIVA",
       observacoes: "Classe de estudo bíblico teológico aprofundado para adultos.",
+      curso_id: CURSO_TEOLOGIA,
+      capacidade: 30,
     },
     {
       id: CLASSE_JOVENS,
@@ -202,6 +221,8 @@ const DEFAULT_DATA: EbdStoreData = {
       cor: "blue",
       status: "ATIVA",
       observacoes: "Classe dinâmica voltada para jovens e adolescentes.",
+      curso_id: CURSO_HISTORIA,
+      capacidade: 25,
     },
     {
       id: CLASSE_JUNIORES,
@@ -216,6 +237,8 @@ const DEFAULT_DATA: EbdStoreData = {
       cor: "amber",
       status: "ATIVA",
       observacoes: "Ensino bíblico lúdico e interativo para os juniores.",
+      curso_id: CURSO_VIDACRISTA,
+      capacidade: 15,
     },
     {
       id: CLASSE_CASAIS,
@@ -230,6 +253,8 @@ const DEFAULT_DATA: EbdStoreData = {
       cor: "slate",
       status: "INATIVA",
       observacoes: "Classe especial focada na edificação de casamentos e lares.",
+      curso_id: null,
+      capacidade: 20,
     },
   ],
   professores: [
@@ -273,6 +298,7 @@ const DEFAULT_DATA: EbdStoreData = {
       observacoes: "Auxiliar da classe de Juniores.",
       ativo: true
     }
+  ],
   alunos: [
     {
       id: ALUNO_ANDRE,
@@ -515,6 +541,16 @@ const DEFAULT_DATA: EbdStoreData = {
       data_evento: "2026-05-15T15:00:00Z",
     },
   ],
+  matriculas: [
+    { id: "m1", aluno_id: ALUNO_ANDRE, classe_id: CLASSE_ADULTOS, data_matricula: "2026-01-10", situacao: "ATIVO" },
+    { id: "m2", aluno_id: ALUNO_BEATRIZ, classe_id: CLASSE_ADULTOS, data_matricula: "2026-01-15", situacao: "ATIVO" },
+    { id: "m3", aluno_id: ALUNO_GABRIEL, classe_id: CLASSE_ADULTOS, data_matricula: "2026-02-01", situacao: "ATIVO" },
+    { id: "m4", aluno_id: ALUNO_CARLOS, classe_id: CLASSE_JOVENS, data_matricula: "2026-01-11", situacao: "ATIVO" },
+    { id: "m5", aluno_id: ALUNO_DANIELA, classe_id: CLASSE_JOVENS, data_matricula: "2026-06-25", situacao: "ATIVO" },
+    { id: "m6", aluno_id: ALUNO_FERNANDA, classe_id: CLASSE_JUNIORES, data_matricula: "2026-03-01", situacao: "ATIVO" },
+    { id: "m7", aluno_id: ALUNO_EDUARDO, classe_id: CLASSE_JUNIORES, data_matricula: "2026-01-20", situacao: "INATIVO", data_saida: "2026-05-15", motivo_saida: "Mudou-se de bairro." },
+    { id: "m8", aluno_id: ALUNO_LUCAS, classe_id: CLASSE_JOVENS, data_matricula: "2026-04-10", situacao: "ATIVO" },
+  ],
 };
 
 function generateUUID() {
@@ -545,6 +581,7 @@ export async function syncFromSupabase() {
     const { data: aulas } = await supabase.from("aulas").select("*");
     const { data: presencas } = await supabase.from("presencas").select("*");
     const { data: historicos } = await supabase.from("historico_classes").select("*");
+    const { data: matriculas } = await supabase.from("matriculas").select("*");
 
     const store = getEbdStore();
 
@@ -572,6 +609,8 @@ export async function syncFromSupabase() {
         cor: c.cor,
         status: c.status as Classe["status"],
         observacoes: c.observacoes,
+        curso_id: c.curso_id,
+        capacidade: c.capacidade,
       })) as Classe[];
     }
 
@@ -627,6 +666,8 @@ export async function syncFromSupabase() {
               presente: p.presente,
               trouxe_biblia: p.trouxe_biblia,
               observacoes: p.observacoes,
+              falta_justificada: (p as any).falta_justificada || false,
+              visitante: (p as any).visitante || false,
             };
           }
         });
@@ -658,6 +699,18 @@ export async function syncFromSupabase() {
       })) as HistoricoClasse[];
     }
 
+    if (matriculas) {
+      store.matriculas = matriculas.map((m) => ({
+        id: m.id,
+        aluno_id: m.aluno_id,
+        classe_id: m.classe_id,
+        data_matricula: m.data_matricula,
+        situacao: m.situacao as Matricula["situacao"],
+        data_saida: m.data_saida,
+        motivo_saida: m.motivo_saida,
+      })) as Matricula[];
+    }
+
     saveEbdStore(store);
   } catch (err) {
     console.error("Failed to sync from Supabase", err);
@@ -679,10 +732,21 @@ export function getEbdStore(): EbdStoreData {
   }
   try {
     const data = JSON.parse(raw) as EbdStoreData;
-    if (data.alunos) {
-      data.alunos = data.alunos.map(deserializeAluno);
+    const mergedData: EbdStoreData = {
+      configuracoes: data.configuracoes || DEFAULT_DATA.configuracoes,
+      classes: data.classes || [],
+      alunos: data.alunos || [],
+      professores: data.professores || [],
+      cursos: data.cursos || [],
+      curso_aluno: data.curso_aluno || [],
+      aulas: data.aulas || [],
+      historico_classes: data.historico_classes || [],
+      matriculas: data.matriculas || [],
+    };
+    if (mergedData.alunos) {
+      mergedData.alunos = mergedData.alunos.map(deserializeAluno);
     }
-    return data;
+    return mergedData;
   } catch (e) {
     console.error("Erro ao parsear dados do localStorage, resetando...", e);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DATA));
@@ -729,6 +793,7 @@ export function clearEbdStore() {
     curso_aluno: [],
     aulas: [],
     historico_classes: [],
+    matriculas: [],
   };
   saveEbdStore(empty);
 }
@@ -775,6 +840,12 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
     throw new Error("Classe inativa não poderá receber novos alunos.");
   }
 
+  // Business rule: "Verificar capacidade da Classe"
+  const activeMatriculas = store.matriculas.filter(m => m.classe_id === aluno.classe_id && m.situacao === "ATIVO");
+  if (targetClass && targetClass.capacidade && activeMatriculas.length >= targetClass.capacidade) {
+    throw new Error(`A classe "${targetClass.nome}" já atingiu sua capacidade máxima de ${targetClass.capacidade} alunos.`);
+  }
+
   const id = generateUUID();
   const newAluno: Aluno = {
     ...aluno,
@@ -784,6 +855,17 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
   
   store.alunos.push(newAluno);
 
+  // Automatically create class enrollment (Matrícula)
+  const matriculaId = generateUUID();
+  const newMatricula: Matricula = {
+    id: matriculaId,
+    aluno_id: id,
+    classe_id: aluno.classe_id,
+    data_matricula: newAluno.data_ingresso || new Date().toISOString().split("T")[0],
+    situacao: "ATIVO",
+  };
+  store.matriculas.push(newMatricula);
+
   // Trigger: Insert history for INGRESSO
   const newHistory: HistoricoClasse = {
     id: generateUUID(),
@@ -791,7 +873,7 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
     classe_origem_id: null,
     classe_destino_id: aluno.classe_id,
     tipo: "INGRESSO",
-    motivo: "Ingresso inicial do aluno no sistema.",
+    motivo: "Ingresso inicial do aluno no sistema com matrícula ativa.",
     data_evento: new Date().toISOString(),
   };
   store.historico_classes.push(newHistory);
@@ -824,7 +906,20 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
         status: aluno.status,
         observacoes: serializedObs,
       }).then(({ error }) => {
-        if (error) console.error("Error syncing addAluno:", error);
+        if (error) {
+          console.error("Error syncing addAluno:", error);
+          return;
+        }
+        // Sync Matrícula
+        supabase.from("matriculas").insert({
+          id: newMatricula.id,
+          aluno_id: newMatricula.aluno_id,
+          classe_id: newMatricula.classe_id,
+          data_matricula: newMatricula.data_matricula,
+          situacao: newMatricula.situacao,
+        }).then(({ error: mErr }) => {
+          if (mErr) console.error("Error syncing auto-matricula:", mErr);
+        });
       });
     }
   }
@@ -850,37 +945,24 @@ export function updateAluno(aluno: Aluno) {
     }
   }
 
-  // Business rule: "Pessoa inativa não poderá ser vinculada a novas classes ou cursos."
-  // And "Classe inativa não poderá receber novos alunos."
+  // Handle Transfer if class changed
   if (oldAluno.classe_id !== aluno.classe_id) {
+    // "Pessoa inativa não poderá ser vinculada a novas classes ou cursos."
     if (aluno.status === "INATIVO") {
       throw new Error("Pessoa inativa não poderá ser vinculada a novas classes.");
     }
-    const targetClass = store.classes.find((c) => c.id === aluno.classe_id);
-    if (targetClass?.status === "INATIVA") {
-      throw new Error("Classe inativa não poderá receber novos alunos.");
-    }
+    
+    // Transfer the enrollment
+    transferirAluno(
+      aluno.id,
+      oldAluno.classe_id || null,
+      aluno.classe_id,
+      new Date().toISOString().split("T")[0],
+      "Transferência realizada via edição de cadastro do aluno."
+    );
   }
 
   store.alunos = store.alunos.map((a) => (a.id === aluno.id ? aluno : a));
-
-  // Trigger: check if class changed
-  if (oldAluno.classe_id !== aluno.classe_id) {
-    const oldClass = store.classes.find((c) => c.id === oldAluno.classe_id);
-    const newClass = store.classes.find((c) => c.id === aluno.classe_id);
-    const isPromo = oldClass?.departamento !== newClass?.departamento;
-
-    const newHistory: HistoricoClasse = {
-      id: generateUUID(),
-      aluno_id: aluno.id,
-      classe_origem_id: oldAluno.classe_id || null,
-      classe_destino_id: aluno.classe_id,
-      tipo: isPromo ? "PROMOCAO" : "TRANSFERENCIA",
-      motivo: `Mudança de classe da turma "${oldClass?.nome || "Sem classe"}" para "${newClass?.nome || "Sem classe"}".`,
-      data_evento: new Date().toISOString(),
-    };
-    store.historico_classes.push(newHistory);
-  }
 
   // Trigger: check if status changed
   if (oldAluno.status !== aluno.status) {
@@ -890,9 +972,58 @@ export function updateAluno(aluno: Aluno) {
     if (aluno.status === "INATIVO") {
       type = "INATIVACAO";
       desc = "Aluno inativado no sistema.";
+      // Also close active class enrollment if inactivating
+      const activeMat = store.matriculas.find(m => m.aluno_id === aluno.id && m.situacao === "ATIVO");
+      if (activeMat) {
+        activeMat.situacao = "INATIVO";
+        activeMat.data_saida = new Date().toISOString().split("T")[0];
+        activeMat.motivo_saida = "Inativação do cadastro do aluno.";
+        store.matriculas = store.matriculas.map(m => m.id === activeMat.id ? activeMat : m);
+        
+        if (supabase) {
+          const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+          if (!isDemo) {
+            supabase.from("matriculas").update({
+              situacao: "INATIVO",
+              data_saida: activeMat.data_saida,
+              motivo_saida: activeMat.motivo_saida,
+            }).eq("id", activeMat.id).then(({ error }) => {
+              if (error) console.error("Error syncing matricula inactivation:", error);
+            });
+          }
+        }
+      }
     } else if (aluno.status === "ATIVO" && oldAluno.status === "INATIVO") {
       type = "REATIVACAO";
       desc = "Aluno reativado no sistema.";
+      // Reactivate or create new active enrollment if possible
+      const hasActive = store.matriculas.some(m => m.aluno_id === aluno.id && m.situacao === "ATIVO");
+      if (!hasActive && aluno.classe_id) {
+        const matId = generateUUID();
+        const newMat: Matricula = {
+          id: matId,
+          aluno_id: aluno.id,
+          classe_id: aluno.classe_id,
+          data_matricula: new Date().toISOString().split("T")[0],
+          situacao: "ATIVO",
+        };
+        store.matriculas.push(newMat);
+
+        if (supabase) {
+          const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+          if (!isDemo) {
+            supabase.from("matriculas").insert({
+              id: matId,
+              aluno_id: aluno.id,
+              classe_id: aluno.classe_id,
+              data_matricula: newMat.data_matricula,
+              situacao: "ATIVO",
+            }).then(({ error }) => {
+              if (error) console.error("Error syncing reactive matricula:", error);
+            });
+          }
+        }
+      }
     }
 
     if (type) {
@@ -944,14 +1075,17 @@ export function updateAluno(aluno: Aluno) {
 export function deleteAluno(id: string) {
   const store = getEbdStore();
 
-  // Rule: Não excluir aluno com histórico
+  // Rule: Não excluir aluno com histórico (any history or lessons attended)
   const hasHistory = store.historico_classes.some((h) => h.aluno_id === id && h.tipo !== "INGRESSO");
-  if (hasHistory) {
-    throw new Error("Não é possível excluir um aluno que possui histórico de movimentação. Prefira inativá-lo.");
+  const hasAulasHist = store.aulas.some((a) => Object.keys(a.presencas).includes(id));
+  if (hasHistory || hasAulasHist) {
+    throw new Error("Não é possível excluir um aluno que possui histórico de movimentação ou presença registrada. Prefira inativá-lo.");
   }
 
   // Clean histories linked to the aluno
   store.historico_classes = store.historico_classes.filter((h) => h.aluno_id !== id);
+  // Clean matriculas
+  store.matriculas = store.matriculas.filter((m) => m.aluno_id !== id);
   // Clean matriculas in courses
   store.curso_aluno = store.curso_aluno.filter((ca) => ca.aluno_id !== id);
   // Clean student row
@@ -966,6 +1100,255 @@ export function deleteAluno(id: string) {
       supabase.from("alunos").delete().eq("id", id).then(({ error }) => {
         if (error) console.error("Error syncing deleteAluno:", error);
       });
+    }
+  }
+}
+
+// MATRICULAS
+export function addMatricula(matricula: Omit<Matricula, "id">) {
+  const store = getEbdStore();
+
+  // Capacity check
+  const activeMatriculas = store.matriculas.filter(m => m.classe_id === matricula.classe_id && m.situacao === "ATIVO");
+  const targetClass = store.classes.find(c => c.id === matricula.classe_id);
+  if (targetClass && targetClass.capacidade && activeMatriculas.length >= targetClass.capacidade) {
+    throw new Error(`A classe "${targetClass.nome}" já atingiu sua capacidade máxima de ${targetClass.capacidade} alunos.`);
+  }
+
+  // Check if class is active
+  if (targetClass?.status === "INATIVA") {
+    throw new Error("Classe inativa não poderá receber novas matrículas.");
+  }
+
+  // Check if already active matricula exists
+  const alreadyActive = store.matriculas.some(m => m.aluno_id === matricula.aluno_id && m.classe_id === matricula.classe_id && m.situacao === "ATIVO");
+  if (alreadyActive) {
+    throw new Error("O aluno já possui uma matrícula ativa nesta classe.");
+  }
+
+  const id = generateUUID();
+  const newMatricula: Matricula = {
+    ...matricula,
+    id,
+  };
+
+  store.matriculas.push(newMatricula);
+  saveEbdStore(store);
+
+  // Sync to Supabase
+  if (supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("matriculas").insert({
+        id,
+        aluno_id: matricula.aluno_id,
+        classe_id: matricula.classe_id,
+        data_matricula: matricula.data_matricula,
+        situacao: matricula.situacao,
+        data_saida: matricula.data_saida || null,
+        motivo_saida: matricula.motivo_saida || null,
+      }).then(({ error }) => {
+        if (error) console.error("Error syncing addMatricula:", error);
+      });
+    }
+  }
+
+  return newMatricula;
+}
+
+export function updateMatricula(matricula: Matricula) {
+  const store = getEbdStore();
+  store.matriculas = store.matriculas.map((m) => (m.id === matricula.id ? matricula : m));
+  saveEbdStore(store);
+
+  if (supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("matriculas").update({
+        situacao: matricula.situacao,
+        data_saida: matricula.data_saida || null,
+        motivo_saida: matricula.motivo_saida || null,
+      }).eq("id", matricula.id).then(({ error }) => {
+        if (error) console.error("Error syncing updateMatricula:", error);
+      });
+    }
+  }
+}
+
+export function transferirAluno(
+  alunoId: string,
+  classeOrigemId: string | null,
+  classeDestinoId: string,
+  dataTransferencia: string,
+  motivo: string
+) {
+  const store = getEbdStore();
+
+  // Close current active matricula in source class
+  if (classeOrigemId) {
+    const activeMat = store.matriculas.find(
+      (m) => m.aluno_id === alunoId && m.classe_id === classeOrigemId && m.situacao === "ATIVO"
+    );
+    if (activeMat) {
+      activeMat.situacao = "TRANSFERIDO";
+      activeMat.data_saida = dataTransferencia;
+      activeMat.motivo_saida = motivo;
+      
+      // Update locally
+      store.matriculas = store.matriculas.map(m => m.id === activeMat.id ? activeMat : m);
+      
+      if (supabase) {
+        const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+        if (!isDemo) {
+          supabase.from("matriculas").update({
+            situacao: "TRANSFERIDO",
+            data_saida: dataTransferencia,
+            motivo_saida: motivo,
+          }).eq("id", activeMat.id).then(({ error }) => {
+            if (error) console.error("Error updating transfer enrollment:", error);
+          });
+        }
+      }
+    }
+  }
+
+  // Create new active matricula in destination class
+  const newMat = addMatricula({
+    aluno_id: alunoId,
+    classe_id: classeDestinoId,
+    data_matricula: dataTransferencia,
+    situacao: "ATIVO",
+  });
+
+  // Log transfer in historico_classes
+  const historyId = generateUUID();
+  const oldClass = store.classes.find((c) => c.id === classeOrigemId);
+  const newClass = store.classes.find((c) => c.id === classeDestinoId);
+  const isPromo = oldClass?.departamento !== newClass?.departamento;
+
+  const newHistory: HistoricoClasse = {
+    id: historyId,
+    aluno_id: alunoId,
+    classe_origem_id: classeOrigemId,
+    classe_destino_id: classeDestinoId,
+    tipo: isPromo ? "PROMOCAO" : "TRANSFERENCIA",
+    motivo: motivo || `Transferência de "${oldClass?.nome || "Sem classe"}" para "${newClass?.nome || "Sem classe"}".`,
+    data_evento: new Date().toISOString(),
+  };
+  store.historico_classes.push(newHistory);
+
+  // Update student current class
+  const student = store.alunos.find((a) => a.id === alunoId);
+  if (student) {
+    student.classe_id = classeDestinoId;
+    store.alunos = store.alunos.map((a) => (a.id === student.id ? student : a));
+  }
+
+  saveEbdStore(store);
+
+  // Sync history and student to Supabase
+  if (supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("historico_classes").insert({
+        id: historyId,
+        aluno_id: newHistory.aluno_id,
+        classe_origem_id: newHistory.classe_origem_id,
+        classe_destino_id: newHistory.classe_destino_id,
+        tipo: newHistory.tipo,
+        motivo: newHistory.motivo,
+        data_evento: newHistory.data_evento,
+      }).then(({ error }) => {
+        if (error) console.error("Error syncing transfer history:", error);
+      });
+
+      supabase.from("alunos").update({
+        classe_id: classeDestinoId,
+      }).eq("id", alunoId).then(({ error }) => {
+        if (error) console.error("Error syncing student active class:", error);
+      });
+    }
+  }
+}
+
+export function encerrarMatricula(
+  alunoId: string,
+  classeId: string,
+  situacao: Matricula["situacao"],
+  dataSaida: string,
+  motivo: string
+) {
+  const store = getEbdStore();
+
+  const activeMat = store.matriculas.find(
+    (m) => m.aluno_id === alunoId && m.classe_id === classeId && m.situacao === "ATIVO"
+  );
+  if (!activeMat) {
+    throw new Error("Nenhuma matrícula ativa encontrada para esta classe.");
+  }
+
+  activeMat.situacao = situacao;
+  activeMat.data_saida = dataSaida;
+  activeMat.motivo_saida = motivo;
+  
+  store.matriculas = store.matriculas.map(m => m.id === activeMat.id ? activeMat : m);
+
+  // Log in historico_classes
+  const historyId = generateUUID();
+  const newHistory: HistoricoClasse = {
+    id: historyId,
+    aluno_id: alunoId,
+    classe_origem_id: classeId,
+    classe_destino_id: null,
+    tipo: "INATIVACAO",
+    motivo: motivo || `Saída da classe. Situação: ${situacao}.`,
+    data_evento: new Date().toISOString(),
+  };
+  store.historico_classes.push(newHistory);
+  
+  // Update student status to INATIVO if the user chose INATIVO/FALECIDO
+  const student = store.alunos.find(a => a.id === alunoId);
+  if (student) {
+    if (situacao === "INATIVO" || situacao === "FALECIDO") {
+      student.status = "INATIVO";
+    }
+    // Set student class to null or leave it for historical records
+    store.alunos = store.alunos.map(a => a.id === student.id ? student : a);
+  }
+
+  saveEbdStore(store);
+
+  // Sync to Supabase
+  if (supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("matriculas").update({
+        situacao: situacao,
+        data_saida: dataSaida,
+        motivo_saida: motivo,
+      }).eq("id", activeMat.id).then(({ error }) => {
+        if (error) console.error("Error updating end matricula:", error);
+      });
+
+      supabase.from("historico_classes").insert({
+        id: historyId,
+        aluno_id: newHistory.aluno_id,
+        classe_origem_id: newHistory.classe_origem_id,
+        classe_destino_id: null,
+        tipo: newHistory.tipo,
+        motivo: newHistory.motivo,
+        data_evento: newHistory.data_evento,
+      }).then(({ error }) => {
+        if (error) console.error("Error syncing end matricula history:", error);
+      });
+
+      if (student && (situacao === "INATIVO" || situacao === "FALECIDO")) {
+        supabase.from("alunos").update({
+          status: "INATIVO"
+        }).eq("id", alunoId).then(({ error }) => {
+          if (error) console.error("Error syncing student inactivation:", error);
+        });
+      }
     }
   }
 }
@@ -1033,10 +1416,10 @@ export function updateProfessor(professor: Professor) {
 export function deleteProfessor(id: string) {
   const store = getEbdStore();
   
-  // Rule: Check if professor is linked to any active classes
-  const isLinked = store.classes.some((c) => (c.professor_id === id || c.professor_auxiliar_id === id) && c.status === "ATIVA");
+  // Rule: Check if professor is linked to any classes
+  const isLinked = store.classes.some((c) => c.professor_id === id || c.professor_auxiliar_id === id);
   if (isLinked) {
-    throw new Error("Não é possível excluir um professor vinculado a uma classe ativa.");
+    throw new Error("Não é possível excluir um professor que possui classes vinculadas. Prefira inativá-lo.");
   }
 
   store.professores = store.professores.filter((p) => p.id !== id);
@@ -1059,10 +1442,17 @@ export function addClasse(classe: Omit<Classe, "id">) {
   if (nameExists) {
     throw new Error("Já existe uma classe cadastrada com este nome.");
   }
+  
+  // Rule: "Classe sem Professor" is not allowed
+  if (!classe.professor_id && !classe.professor) {
+    throw new Error("Não é permitida uma classe sem professor responsável.");
+  }
+
   const id = generateUUID();
   const newClasse: Classe = {
     ...classe,
     id,
+    capacidade: classe.capacidade || 30,
   };
   store.classes.push(newClasse);
   saveEbdStore(store);
@@ -1078,10 +1468,14 @@ export function addClasse(classe: Omit<Classe, "id">) {
         faixa_etaria: classe.faixa_etaria,
         professor: classe.professor,
         professor_auxiliar: classe.professor_auxiliar,
+        professor_id: classe.professor_id || null,
+        professor_auxiliar_id: classe.professor_auxiliar_id || null,
         sala: classe.sala,
         cor: classe.cor,
         status: classe.status,
         observacoes: classe.observacoes,
+        curso_id: classe.curso_id || null,
+        capacidade: classe.capacidade || 30,
       }).then(({ error }) => {
         if (error) console.error("Error syncing addClasse:", error);
       });
@@ -1099,6 +1493,12 @@ export function updateClasse(classe: Classe) {
   if (nameExists) {
     throw new Error("Já existe uma classe cadastrada com este nome.");
   }
+
+  // Rule: "Classe sem Professor" is not allowed
+  if (!classe.professor_id && !classe.professor) {
+    throw new Error("Não é permitida uma classe sem professor responsável.");
+  }
+
   store.classes = store.classes.map((c) => (c.id === classe.id ? classe : c));
   saveEbdStore(store);
 
@@ -1112,10 +1512,14 @@ export function updateClasse(classe: Classe) {
         faixa_etaria: classe.faixa_etaria,
         professor: classe.professor,
         professor_auxiliar: classe.professor_auxiliar,
+        professor_id: classe.professor_id || null,
+        professor_auxiliar_id: classe.professor_auxiliar_id || null,
         sala: classe.sala,
         cor: classe.cor,
         status: classe.status,
         observacoes: classe.observacoes,
+        curso_id: classe.curso_id || null,
+        capacidade: classe.capacidade || 30,
       }).eq("id", classe.id).then(({ error }) => {
         if (error) console.error("Error syncing updateClasse:", error);
       });
@@ -1126,10 +1530,11 @@ export function updateClasse(classe: Classe) {
 export function deleteClasse(id: string) {
   const store = getEbdStore();
 
-  // Rule: Não excluir classe que possua alunos
+  // Rule: Não excluir classe que possua alunos (both via backward compatible field and matriculas table)
   const hasStudents = store.alunos.some((a) => a.classe_id === id);
-  if (hasStudents) {
-    throw new Error("Não é possível excluir uma classe que possui alunos vinculados. Remova ou transfira os alunos primeiro.");
+  const hasMatriculas = store.matriculas.some((m) => m.classe_id === id && m.situacao === "ATIVO");
+  if (hasStudents || hasMatriculas) {
+    throw new Error("Não é possível excluir uma classe que possui alunos matriculados ativos. Remova ou transfira os alunos primeiro.");
   }
 
   // Rule: Não excluir classe que possua aulas lecionadas
@@ -1217,6 +1622,12 @@ export function updateCurso(curso: Curso) {
 
 export function deleteCurso(id: string) {
   const store = getEbdStore();
+
+// Rule: Não excluir curso com classes
+  const hasClasses = store.classes.some((c) => c.curso_id === id);
+  if (hasClasses) {
+    throw new Error("Não é possível excluir um curso que possui classes (turmas) vinculadas.");
+  }
 
   // Rule: Não excluir curso com matrículas
   const hasMatriculas = store.curso_aluno.some((ca) => ca.curso_id === id);
@@ -1316,9 +1727,29 @@ export function addAula(aula: Omit<Aula, "id">) {
   }
 
   const id = generateUUID();
+  
+  // Auto-populate presencas for all active matriculated students in that class
+  const activeStudentIds = store.matriculas
+    .filter((m) => m.classe_id === aula.classe_id && m.situacao === "ATIVO")
+    .map((m) => m.aluno_id);
+
+  const presencas = { ...aula.presencas };
+  activeStudentIds.forEach((alunoId) => {
+    if (!presencas[alunoId]) {
+      presencas[alunoId] = {
+        presente: false,
+        trouxe_biblia: false,
+        observacoes: "",
+        falta_justificada: false,
+        visitante: false,
+      };
+    }
+  });
+
   const newAula: Aula = {
     ...aula,
     id,
+    presencas,
   };
 
   // Rule checks: trouxe_biblia can only be true if presente is true
@@ -1350,16 +1781,18 @@ export function addAula(aula: Omit<Aula, "id">) {
           console.error("Error syncing addAula:", error);
           return;
         }
-        // Sync presences
+        // Sync presences using upsert
         const presencesToInsert = Object.entries(newAula.presencas).map(([alunoId, p]) => ({
           aula_id: id,
           aluno_id: alunoId,
           presente: p.presente,
           trouxe_biblia: p.trouxe_biblia,
           observacoes: p.observacoes || null,
+          falta_justificada: (p as any).falta_justificada || false,
+          visitante: (p as any).visitante || false,
         }));
         if (presencesToInsert.length > 0) {
-          supabase!.from("presencas").insert(presencesToInsert).then(({ error: pError }) => {
+          supabase!.from("presencas").upsert(presencesToInsert).then(({ error: pError }) => {
             if (pError) console.error("Error syncing presences to Supabase:", pError);
           });
         }
@@ -1368,6 +1801,45 @@ export function addAula(aula: Omit<Aula, "id">) {
   }
 
   return newAula;
+}
+
+export function updateAula(aula: Aula) {
+  const store = getEbdStore();
+  store.aulas = store.aulas.map((a) => (a.id === aula.id ? aula : a));
+  saveEbdStore(store);
+
+  if (supabase) {
+    const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
+    if (!isDemo) {
+      supabase.from("aulas").update({
+        tema: aula.tema,
+        numero_licao: aula.numero_licao,
+        professor: aula.professor,
+        professor_substituto: aula.professor_substituto,
+        observacoes: aula.observacoes,
+      }).eq("id", aula.id).then(({ error }) => {
+        if (error) {
+          console.error("Error syncing updateAula:", error);
+          return;
+        }
+        // Sync presences
+        const presencesToInsert = Object.entries(aula.presencas).map(([alunoId, p]) => ({
+          aula_id: aula.id,
+          aluno_id: alunoId,
+          presente: p.presente,
+          trouxe_biblia: p.trouxe_biblia,
+          observacoes: p.observacoes || null,
+          falta_justificada: (p as any).falta_justificada || false,
+          visitante: (p as any).visitante || false,
+        }));
+        if (presencesToInsert.length > 0) {
+          supabase!.from("presencas").upsert(presencesToInsert).then(({ error: pError }) => {
+            if (pError) console.error("Error syncing updated presences to Supabase:", pError);
+          });
+        }
+      });
+    }
+  }
 }
 
 export function deleteAula(id: string) {
