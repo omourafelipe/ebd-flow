@@ -19,10 +19,8 @@ export interface MenuItem {
 export const menuItems: MenuItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/classes", label: "Classes", icon: BookOpen },
-  { to: "/alunos", label: "Alunos", icon: Users },
+  { to: "/alunos", label: "Pessoas", icon: Users },
   { to: "/cursos", label: "Cursos", icon: GraduationCap },
-  { to: "/aulas", label: "Aulas", icon: CalendarCheck },
-  { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 

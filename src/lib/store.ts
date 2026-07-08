@@ -27,6 +27,8 @@ export interface Aluno {
   data_ingresso: string | null;
   status: "ATIVO" | "VISITANTE" | "INATIVO";
   observacoes: string | null;
+  funcoes?: string[];
+  endereco?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -98,6 +100,28 @@ export interface EbdStoreData {
   curso_aluno: CursoAluno[];
   aulas: Aula[];
   historico_classes: HistoricoClasse[];
+}
+
+export function deserializeAluno(a: any): Aluno {
+  let parsedObs = a.observacoes;
+  let funcoes: string[] = a.status === "VISITANTE" ? ["Visitante"] : ["Aluno"];
+  let endereco: string | null = null;
+  if (a.observacoes && a.observacoes.startsWith('{"__metadata":')) {
+    try {
+      const parsed = JSON.parse(a.observacoes);
+      parsedObs = parsed.observacoes || null;
+      funcoes = parsed.__metadata?.funcoes || funcoes;
+      endereco = parsed.__metadata?.endereco || null;
+    } catch (e) {
+      console.error("Failed to parse metadata for aluno", a.id, e);
+    }
+  }
+  return {
+    ...a,
+    observacoes: parsedObs,
+    funcoes,
+    endereco
+  };
 }
 
 // Fixed UUIDs for Mock Data Consistency
@@ -477,18 +501,7 @@ export async function syncFromSupabase() {
     }
 
     if (alunos) {
-      store.alunos = alunos.map((a) => ({
-        id: a.id,
-        classe_id: a.classe_id,
-        nome: a.nome,
-        sexo: a.sexo,
-        telefone: a.telefone,
-        email: a.email,
-        data_nascimento: a.data_nascimento,
-        data_ingresso: a.data_ingresso,
-        status: a.status,
-        observacoes: a.observacoes,
-      }));
+      store.alunos = alunos.map((a) => deserializeAluno(a));
     }
 
     if (courses) {
@@ -576,7 +589,11 @@ export function getEbdStore(): EbdStoreData {
     return DEFAULT_DATA;
   }
   try {
-    return JSON.parse(raw) as EbdStoreData;
+    const data = JSON.parse(raw) as EbdStoreData;
+    if (data.alunos) {
+      data.alunos = data.alunos.map(deserializeAluno);
+    }
+    return data;
   } catch (e) {
     console.error("Erro ao parsear dados do localStorage, resetando...", e);
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_DATA));
@@ -586,7 +603,19 @@ export function getEbdStore(): EbdStoreData {
 
 export function saveEbdStore(data: EbdStoreData) {
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const serializedAlunos = data.alunos.map(a => {
+      const { funcoes, endereco, ...rest } = a;
+      let serializedObs = rest.observacoes;
+      if (funcoes || endereco) {
+        serializedObs = JSON.stringify({
+          __metadata: { funcoes: funcoes || [], endereco: endereco || null },
+          observacoes: rest.observacoes || null
+        });
+      }
+      return { ...rest, observacoes: serializedObs } as Aluno;
+    });
+    const serializedData = { ...data, alunos: serializedAlunos };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(serializedData));
     listeners.forEach((listener) => listener());
   }
 }
@@ -638,6 +667,24 @@ export function useEbdStore() {
 // ALUNOS
 export function addAluno(aluno: Omit<Aluno, "id">) {
   const store = getEbdStore();
+
+  // Duplicity check: name and telephone coincide
+  if (aluno.nome && aluno.telefone) {
+    const exists = store.alunos.some(
+      (a) => a.nome.trim().toLowerCase() === aluno.nome.trim().toLowerCase() && 
+             a.telefone === aluno.telefone
+    );
+    if (exists) {
+      throw new Error("Não é permitida duplicidade por nome e telefone quando ambos coincidirem.");
+    }
+  }
+
+  // Business rule: "Classe inativa não poderá receber novos alunos."
+  const targetClass = store.classes.find((c) => c.id === aluno.classe_id);
+  if (targetClass?.status === "INATIVA") {
+    throw new Error("Classe inativa não poderá receber novos alunos.");
+  }
+
   const id = generateUUID();
   const newAluno: Aluno = {
     ...aluno,
@@ -665,6 +712,16 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
   if (isSupabaseConfigured && supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
+      // Serialize observations for Supabase
+      const { funcoes, endereco, ...rest } = newAluno;
+      let serializedObs = rest.observacoes;
+      if (funcoes || endereco) {
+        serializedObs = JSON.stringify({
+          __metadata: { funcoes: funcoes || [], endereco: endereco || null },
+          observacoes: rest.observacoes || null
+        });
+      }
+
       supabase.from("alunos").insert({
         id,
         classe_id: aluno.classe_id,
@@ -675,7 +732,7 @@ export function addAluno(aluno: Omit<Aluno, "id">) {
         data_nascimento: aluno.data_nascimento,
         data_ingresso: newAluno.data_ingresso,
         status: aluno.status,
-        observacoes: aluno.observacoes,
+        observacoes: serializedObs,
       }).then(({ error }) => {
         if (error) console.error("Error syncing addAluno:", error);
       });
@@ -690,6 +747,30 @@ export function updateAluno(aluno: Aluno) {
   const oldAluno = store.alunos.find((a) => a.id === aluno.id);
 
   if (!oldAluno) return;
+
+  // Duplicity check: name and telephone coincide
+  if (aluno.nome && aluno.telefone) {
+    const exists = store.alunos.some(
+      (a) => a.id !== aluno.id &&
+             a.nome.trim().toLowerCase() === aluno.nome.trim().toLowerCase() && 
+             a.telefone === aluno.telefone
+    );
+    if (exists) {
+      throw new Error("Não é permitida duplicidade por nome e telefone quando ambos coincidirem.");
+    }
+  }
+
+  // Business rule: "Pessoa inativa não poderá ser vinculada a novas classes ou cursos."
+  // And "Classe inativa não poderá receber novos alunos."
+  if (oldAluno.classe_id !== aluno.classe_id) {
+    if (aluno.status === "INATIVO") {
+      throw new Error("Pessoa inativa não poderá ser vinculada a novas classes.");
+    }
+    const targetClass = store.classes.find((c) => c.id === aluno.classe_id);
+    if (targetClass?.status === "INATIVA") {
+      throw new Error("Classe inativa não poderá receber novos alunos.");
+    }
+  }
 
   store.alunos = store.alunos.map((a) => (a.id === aluno.id ? aluno : a));
 
@@ -744,6 +825,16 @@ export function updateAluno(aluno: Aluno) {
   if (isSupabaseConfigured && supabase) {
     const isDemo = typeof window !== "undefined" && window.localStorage.getItem("ebd_demo_mode") === "true";
     if (!isDemo) {
+      // Serialize observations for Supabase
+      const { funcoes, endereco, ...rest } = aluno;
+      let serializedObs = rest.observacoes;
+      if (funcoes || endereco) {
+        serializedObs = JSON.stringify({
+          __metadata: { funcoes: funcoes || [], endereco: endereco || null },
+          observacoes: rest.observacoes || null
+        });
+      }
+
       supabase.from("alunos").update({
         classe_id: aluno.classe_id,
         nome: aluno.nome,
@@ -752,7 +843,7 @@ export function updateAluno(aluno: Aluno) {
         email: aluno.email,
         data_nascimento: aluno.data_nascimento,
         status: aluno.status,
-        observacoes: aluno.observacoes,
+        observacoes: serializedObs,
       }).eq("id", aluno.id).then(({ error }) => {
         if (error) console.error("Error syncing updateAluno:", error);
       });
@@ -792,6 +883,10 @@ export function deleteAluno(id: string) {
 // CLASSES
 export function addClasse(classe: Omit<Classe, "id">) {
   const store = getEbdStore();
+  const nameExists = store.classes.some((c) => c.nome.trim().toLowerCase() === classe.nome.trim().toLowerCase());
+  if (nameExists) {
+    throw new Error("Já existe uma classe cadastrada com este nome.");
+  }
   const id = generateUUID();
   const newClasse: Classe = {
     ...classe,
@@ -826,6 +921,12 @@ export function addClasse(classe: Omit<Classe, "id">) {
 
 export function updateClasse(classe: Classe) {
   const store = getEbdStore();
+  const nameExists = store.classes.some(
+    (c) => c.id !== classe.id && c.nome.trim().toLowerCase() === classe.nome.trim().toLowerCase()
+  );
+  if (nameExists) {
+    throw new Error("Já existe uma classe cadastrada com este nome.");
+  }
   store.classes = store.classes.map((c) => (c.id === classe.id ? classe : c));
   saveEbdStore(store);
 
@@ -962,6 +1063,18 @@ export function deleteCurso(id: string) {
 // CURSO MATRICULAS (N:N)
 export function matricularAlunoCurso(cursoId: string, alunoId: string) {
   const store = getEbdStore();
+
+  // Rule: "Curso concluído não aceitará novas matrículas."
+  const curso = store.cursos.find((c) => c.id === cursoId);
+  if (curso?.status === "CONCLUIDO") {
+    throw new Error("Curso concluído não aceita novas matrículas.");
+  }
+
+  // Rule: "Pessoa inativa não poderá ser vinculada a novas classes ou cursos."
+  const aluno = store.alunos.find((a) => a.id === alunoId);
+  if (aluno?.status === "INATIVO") {
+    throw new Error("Pessoas inativas não podem ser vinculadas a novos cursos.");
+  }
 
   // Prevents duplication constraint
   const alreadyEnrolled = store.curso_aluno.some((ca) => ca.curso_id === cursoId && ca.aluno_id === alunoId);
