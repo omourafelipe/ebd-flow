@@ -406,7 +406,6 @@ export type Database = {
           email: string | null
           id: string
           nome: string
-          role: string
           updated_at: string
         }
         Insert: {
@@ -414,7 +413,6 @@ export type Database = {
           email?: string | null
           id: string
           nome: string
-          role?: string
           updated_at?: string
         }
         Update: {
@@ -422,10 +420,38 @@ export type Database = {
           email?: string | null
           id?: string
           nome?: string
-          role?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          user_id: string
+          role: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          role: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          role?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
       }
     }
     Views: {

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
-import { BookOpen, User, Calendar, Phone } from "lucide-react";
+import { BookOpen, User, Calendar, Phone, Check } from "lucide-react";
 
 export const Route = createFileRoute("/inscricao/$classeId")({
   component: PublicRegistrationPage,

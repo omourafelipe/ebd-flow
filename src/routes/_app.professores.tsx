@@ -73,12 +73,17 @@ function ProfessoresPage() {
       if (supabase) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          const { data: profile } = await supabase
-            .from("profiles")
+          const { data: roles } = await supabase
+            .from("user_roles")
             .select("role")
-            .eq("id", session.user.id)
-            .maybeSingle();
-          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+            .eq("user_id", session.user.id);
+          const dbRole = roles && roles.length > 0 ? roles[0].role : null;
+          let mappedRole = "STUDENT";
+          if (dbRole === "ADMIN") mappedRole = "ADMIN";
+          else if (dbRole === "PROFESSOR") mappedRole = "TEACHER";
+          else if (dbRole === "ALUNO") mappedRole = "STUDENT";
+          
+          setCurrentUserRole(mappedRole || session.user.user_metadata?.role || "STUDENT");
         }
       } else {
         setCurrentUserRole("ADMIN");
@@ -248,8 +253,8 @@ function ProfessoresPage() {
   });
 
   const sortedPessoas = [...filteredPessoas].sort((a, b) => {
-    let valA: any = a[sortBy === "classe" ? "id" : sortBy];
-    let valB: any = b[sortBy === "classe" ? "id" : sortBy];
+    let valA: any = "";
+    let valB: any = "";
 
     if (sortBy === "classe") {
       const classA = store.classes.find(
@@ -263,6 +268,9 @@ function ProfessoresPage() {
     } else if (sortBy === "status") {
       valA = a.ativo ? "ativo" : "inativo";
       valB = b.ativo ? "ativo" : "inativo";
+    } else {
+      valA = a.nome || "";
+      valB = b.nome || "";
     }
 
     valA = (valA || "").toString().toLowerCase();
@@ -419,6 +427,81 @@ function ProfessoresPage() {
               </tbody>
             </table>
           </div>
+
+          <div className="grid grid-cols-1 gap-3 md:hidden">
+            {currentPessoas.map((p) => {
+              const targetClass = store.classes.find(
+                (c) => c.professor_id === p.id || c.professor_auxiliar_id === p.id
+              );
+              const roles = getProfessorRoles(p.id);
+              return (
+                <Card key={p.id} className="border-none shadow-soft bg-white rounded-2xl p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-800 truncate">{p.nome}</h4>
+                        <span className={`text-[9px] font-bold px-1.75 py-0.25 rounded-full ${getStatusColor(p.ativo)}`}>
+                          {p.ativo ? "ATIVO" : "INATIVO"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {roles.map((f) => (
+                          <span key={f} className={`text-[9px] font-bold px-1.75 py-0.5 rounded-full ${f === "Professor" ? "bg-purple-50 text-purple-600" : "bg-red-50 text-red-600"}`}>
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-[10px] font-semibold text-slate-400 mt-2">
+                        Classe: {targetClass ? targetClass.nome : "Sem classe"}
+                      </p>
+                      {(p.email || p.telefone) && (
+                        <div className="text-[10px] text-slate-400 mt-1 space-y-0.5">
+                          {p.email && <div>{p.email}</div>}
+                          {p.telefone && <div>{p.telefone}</div>}
+                        </div>
+                      )}
+                    </div>
+                    {canManage() && (
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(p)} className="h-8 w-8 text-slate-400 hover:text-slate-600 cursor-pointer">
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setDeletingPessoaId(p.id)} className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50 cursor-pointer">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="border-slate-100 rounded-xl text-xs font-semibold px-3 h-9 cursor-pointer"
+              >
+                Anterior
+              </Button>
+              <span className="text-xs text-slate-400 font-semibold">
+                Página {currentPage} de {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="border-slate-100 rounded-xl text-xs font-semibold px-3 h-9 cursor-pointer"
+              >
+                Próxima
+              </Button>
+            </div>
+          )}
         </>
       )}
 

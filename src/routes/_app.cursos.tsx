@@ -131,10 +131,20 @@ function CursosPage() {
           setCurrentUserId(session.user.id);
           const { data: profile } = await supabase
             .from("profiles")
-            .select("nome, role")
+            .select("nome")
             .eq("id", session.user.id)
             .maybeSingle();
-          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", session.user.id);
+          const dbRole = roles && roles.length > 0 ? roles[0].role : null;
+          let mappedRole = "STUDENT";
+          if (dbRole === "ADMIN") mappedRole = "ADMIN";
+          else if (dbRole === "PROFESSOR") mappedRole = "TEACHER";
+          else if (dbRole === "ALUNO") mappedRole = "STUDENT";
+
+          setCurrentUserRole(mappedRole || session.user.user_metadata?.role || "STUDENT");
           setCurrentUserName(profile?.nome || session.user.user_metadata?.nome || session.user.user_metadata?.name || "");
         }
       } else {

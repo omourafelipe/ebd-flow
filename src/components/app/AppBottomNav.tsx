@@ -1,8 +1,24 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { menuItems } from "@/lib/app-shell-utils";
 
-export function AppBottomNav() {
+interface AppBottomNavProps {
+  userRole?: string;
+}
+
+export function AppBottomNav({ userRole = "STUDENT" }: AppBottomNavProps) {
   const location = useLocation();
+
+  const filteredMenuItems = menuItems.filter(item => {
+    if (userRole === "STUDENT") {
+      // Students only see Dashboard, Classes, Cursos in mobile view
+      return ["/dashboard", "/classes", "/cursos"].includes(item.to);
+    }
+    if (userRole === "TEACHER") {
+      // Teachers don't see settings
+      return item.to !== "/configuracoes";
+    }
+    return true; // Admin sees all
+  });
 
   return (
     <nav
@@ -10,7 +26,7 @@ export function AppBottomNav() {
       role="navigation"
       aria-label="Navegação rápida"
     >
-      {menuItems.map((item) => {
+      {filteredMenuItems.map((item) => {
         const isActive = location.pathname.startsWith(item.to);
         return (
           <Link

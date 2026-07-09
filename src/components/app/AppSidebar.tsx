@@ -26,7 +26,17 @@ export function AppSidebar({ userName, userRole, onLogout }: AppSidebarProps) {
 
       {/* Sidebar Menu */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" role="navigation" aria-label="Menu principal">
-        {menuItems.map((item) => {
+        {menuItems.filter(item => {
+          if (userRole === "STUDENT") {
+            // Students can only see Dashboard, Classes, Cursos
+            return ["/dashboard", "/classes", "/cursos"].includes(item.to);
+          }
+          if (userRole === "TEACHER") {
+            // Teachers can see everything except configurations
+            return item.to !== "/configuracoes";
+          }
+          return true; // Admin can see everything
+        }).map((item) => {
           const isActive = location.pathname.startsWith(item.to);
           return (
             <Link

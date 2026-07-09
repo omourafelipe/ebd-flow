@@ -127,12 +127,17 @@ function ClassesPage() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setCurrentUserId(session.user.id);
-          const { data: profile } = await supabase
-            .from("profiles")
+          const { data: roles } = await supabase
+            .from("user_roles")
             .select("role")
-            .eq("id", session.user.id)
-            .maybeSingle();
-          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+            .eq("user_id", session.user.id);
+          const dbRole = roles && roles.length > 0 ? roles[0].role : null;
+          let mappedRole = "STUDENT";
+          if (dbRole === "ADMIN") mappedRole = "ADMIN";
+          else if (dbRole === "PROFESSOR") mappedRole = "TEACHER";
+          else if (dbRole === "ALUNO") mappedRole = "STUDENT";
+
+          setCurrentUserRole(mappedRole || session.user.user_metadata?.role || "STUDENT");
         }
       } else {
         // Fallback para demo
@@ -1295,12 +1300,16 @@ function ClassesPage() {
                   <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cursos Vinculados</h5>
                 </CardHeader>
                 <CardContent className="p-4 pt-0 space-y-2">
-                  {getClasseDetails(selectedClasse).linkedCourses.length === 0 ? (
-                    <p className="text-[11px] text-slate-400 font-semibold text-center py-2">
-                      Nenhum curso especial vinculado aos alunos desta classe.
-                    </p>
-                  ) : (
-                    getClasseDetails(selectedClasse).linkedCourses.map((course) => (
+                  {(() => {
+                    const course = getClasseDetails(selectedClasse).linkedCourse;
+                    if (!course) {
+                      return (
+                        <p className="text-[11px] text-slate-400 font-semibold text-center py-2">
+                          Nenhum curso especial vinculado aos alunos desta classe.
+                        </p>
+                      );
+                    }
+                    return (
                       <div
                         key={course.id}
                         onClick={() => {
@@ -1319,8 +1328,8 @@ function ClassesPage() {
                           {course.status}
                         </span>
                       </div>
-                    ))
-                  )}
+                    );
+                  })()}
                 </CardContent>
               </Card>
 

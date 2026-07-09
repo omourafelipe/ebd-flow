@@ -6,6 +6,7 @@ import {
   deleteAluno,
   transferirAluno,
   encerrarMatricula,
+  addMatricula,
   Aluno,
   Classe,
   Aula,
@@ -15,6 +16,15 @@ import {
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import {
   Users,
   Plus,
@@ -35,7 +45,10 @@ import {
   ChevronRight,
   ArrowUpDown,
   History,
-  Eye
+  Eye,
+  TrendingUp,
+  Book,
+  CalendarCheck
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -142,6 +155,7 @@ function AlunosPage() {
 
   // Auth State
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<string>("STUDENT");
 
   useEffect(() => {
@@ -150,16 +164,23 @@ function AlunosPage() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setCurrentUserId(session.user.id);
-          const { data: profile } = await supabase
-            .from("profiles")
+          setCurrentUserEmail(session.user.email ?? null);
+          const { data: roles } = await supabase
+            .from("user_roles")
             .select("role")
-            .eq("id", session.user.id)
-            .maybeSingle();
-          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+            .eq("user_id", session.user.id);
+          const dbRole = roles && roles.length > 0 ? roles[0].role : null;
+          let mappedRole = "STUDENT";
+          if (dbRole === "ADMIN") mappedRole = "ADMIN";
+          else if (dbRole === "PROFESSOR") mappedRole = "TEACHER";
+          else if (dbRole === "ALUNO") mappedRole = "STUDENT";
+
+          setCurrentUserRole(mappedRole || session.user.user_metadata?.role || "STUDENT");
         }
       } else {
         // Fallback para demo
         setCurrentUserRole("ADMIN");
+        setCurrentUserEmail(null);
       }
     }
     loadAuth();
@@ -524,16 +545,269 @@ function AlunosPage() {
     }
   };
 
+  if (currentUserRole === "STUDENT") {
+    // Find the corresponding student profile linked to user_id (if email matches, or use currentUserId to mock)
+    // For local mock consistency, find by email or use first student or Andre
+    const myProfile = store.alunos.find(a => a.email === currentUserEmail) || store.alunos.find(a => a.id === currentUserId) || store.alunos[0];
+
+    // Compute stats for current student
+    const studentClass = myProfile ? store.classes.find(c => c.id === myProfile.classe_id) : null;
+    const personalStats = myProfile ? getPessoaStats(myProfile) : { attendanceRate: 0, bibleRate: 0, totalAulas: 0, presentCount: 0 };
+    const timeline = myProfile ? getPessoaTimeline(myProfile) : [];
+
+    // Calculate historical presence for chart
+    const chartData = myProfile ? store.aulas
+      .filter(aula => {
+        // Only lessons from classes the student was/is registered in
+        const isStudentClass = aula.classe_id === myProfile.classe_id;
+        const attended = aula.presencas[myProfile.id] !== undefined;
+        return isStudentClass && attended;
+      })
+      .sort((a, b) => new Date(a.data_aula).getTime() - new Date(b.data_aula).getTime())
+      .map(aula => ({
+        date: aula.data_aula.split("-").reverse().slice(0, 2).join("/"),
+        Presença: aula.presencas[myProfile.id]?.presente ? 100 : 0,
+      })) : [];
+
+    const handleSelfEnroll = (classId: string) => {
+      if (!myProfile) {
+        toast.error("Cadastro de aluno não localizado.");
+        return;
+      }
+      try {
+        addMatricula({
+          aluno_id: myProfile.id,
+          classe_id: classId,
+          data_matricula: new Date().toISOString().split("T")[0],
+          situacao: "ATIVO"
+        });
+        
+        // Update student classe_id local ref
+        myProfile.classe_id = classId;
+        updateAluno(myProfile);
+
+        toast.success("Matrícula realizada com sucesso!");
+      } catch (err: any) {
+        toast.error(err.message || "Erro ao realizar inscrição.");
+      }
+    };
+
+    return (
+      <div className="space-y-6 relative min-h-[calc(100vh-10rem)]">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+            <Users className="h-5.5 w-5.5 text-primary" />
+            Painel do Aluno
+          </h3>
+          <p className="text-xs text-slate-500 font-medium">Veja seu progresso de estudos, histórico de presenças e turmas disponíveis.</p>
+        </div>
+
+        {myProfile ? (
+          <>
+            {/* Overall stats cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="border-none shadow-soft bg-white rounded-2xl">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center flex-shrink-0">
+                    <User className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Classe Atual</p>
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-800 truncate mt-0.5">
+                      {studentClass ? studentClass.nome.split("—")[0].trim() : "Sem Classe"}
+                    </h4>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-soft bg-white rounded-2xl">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Sua Frequência</p>
+                    <h4 className="text-lg font-bold text-slate-800">{personalStats.attendanceRate}%</h4>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-soft bg-white rounded-2xl">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                    <Book className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Trouxe Bíblia</p>
+                    <h4 className="text-lg font-bold text-slate-800">{personalStats.bibleRate}%</h4>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-none shadow-soft bg-white rounded-2xl">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0">
+                    <CalendarCheck className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Aulas Assistidas</p>
+                    <h4 className="text-lg font-bold text-slate-800">{personalStats.presentCount}/{personalStats.totalAulas}</h4>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Attendance Chart & Timeline */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="border-none shadow-soft bg-white rounded-2xl">
+                <CardHeader className="p-4 pb-2">
+                  <CardTitle className="text-sm font-bold text-slate-800 tracking-tight">Presença nas Aulas (%)</CardTitle>
+                  <p className="text-[11px] text-slate-400 font-medium">Histórico de comparecimento nas últimas aulas da classe.</p>
+                </CardHeader>
+                <CardContent className="p-4 pt-0 h-48">
+                  {chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis dataKey="date" tickLine={false} axisLine={false} style={{ fontSize: 10, fill: "#94a3b8" }} />
+                        <YAxis domain={[0, 100]} ticks={[0, 100]} tickLine={false} axisLine={false} style={{ fontSize: 10, fill: "#94a3b8" }} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "#fff",
+                            border: "none",
+                            borderRadius: 12,
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                            fontSize: 11,
+                          }}
+                        />
+                        <Line type="monotone" dataKey="Presença" stroke="var(--color-primary)" strokeWidth={2.5} activeDot={{ r: 6 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-slate-400 font-medium">
+                      Sem dados de chamadas nesta classe.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Timeline */}
+              <Card className="border-none shadow-soft bg-white rounded-2xl">
+                <CardHeader className="p-4 pb-2">
+                  <CardTitle className="text-sm font-bold text-slate-800 tracking-tight">Histórico Acadêmico</CardTitle>
+                  <p className="text-[11px] text-slate-400 font-medium">Movimentações, ingressos e transferências de classes.</p>
+                </CardHeader>
+                <CardContent className="p-4 pt-0 overflow-y-auto max-h-48">
+                  {timeline.length > 0 ? (
+                    <div className="space-y-4 pt-2">
+                      {timeline.map((event) => {
+                        const dateStr = new Date(event.data_evento).toLocaleDateString("pt-BR");
+                        const fromClass = store.classes.find(c => c.id === event.classe_origem_id);
+                        const toClass = store.classes.find(c => c.id === event.classe_destino_id);
+                        return (
+                          <div key={event.id} className="flex gap-3 text-xs leading-normal font-medium">
+                            <div className="w-1.5 h-1.5 bg-primary rounded-full mt-1.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <span className="text-[10px] font-bold text-slate-400 block">{dateStr} — {event.tipo}</span>
+                              <p className="text-slate-700 mt-0.5">
+                                {event.tipo === "INGRESSO" && `Matriculado na classe "${toClass?.nome.split("—")[0].trim()}"`}
+                                {event.tipo === "TRANSFERENCIA" && `Transferido de "${fromClass?.nome.split("—")[0].trim()}" para "${toClass?.nome.split("—")[0].trim()}"`}
+                                {event.tipo === "INATIVACAO" && `Matrícula inativada da classe "${fromClass?.nome.split("—")[0].trim()}"`}
+                              </p>
+                              {event.motivo && <span className="text-[10px] text-slate-400 block italic mt-0.5">Motivo: {event.motivo}</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-xs text-slate-400 font-medium py-12">
+                      Nenhum histórico registrado.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Courses / classes list for registration */}
+            <div>
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1 mb-3">
+                Classes e Cursos Ativos
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {store.classes
+                  .filter((c) => c.status === "ATIVA")
+                  .map((c) => {
+                    const isMyClass = myProfile.classe_id === c.id;
+                    const alreadyEnrolled = store.matriculas.some(
+                      (m) => m.aluno_id === myProfile.id && m.classe_id === c.id && m.situacao === "ATIVO"
+                    );
+
+                    return (
+                      <Card key={c.id} className="border-none shadow-soft bg-white rounded-2xl p-4 flex flex-col justify-between">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[9px] font-bold bg-primary-soft text-primary px-2 py-0.5 rounded-full uppercase tracking-wider">
+                              {c.departamento || "Geral"}
+                            </span>
+                            <span className="text-[9px] font-semibold text-slate-400">
+                              {c.faixa_etaria}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-800 tracking-tight mt-2 truncate">
+                            {c.nome}
+                          </h4>
+                          <p className="text-xs text-slate-400 mt-1 font-medium leading-relaxed">
+                            {c.observacoes || "Nenhuma descrição fornecida."}
+                          </p>
+                          <div className="flex flex-col gap-1 text-[10px] font-bold text-slate-500 uppercase tracking-wide mt-3.5">
+                            <span>Professor: {c.professor}</span>
+                            <span>Sala: {c.sala || "Não informada"}</span>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-50 flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-semibold text-slate-400">
+                            Vagas: {((c.capacidade || 30) - store.matriculas.filter(m => m.classe_id === c.id && m.situacao === "ATIVO").length)}
+                          </span>
+                          <Button
+                            onClick={() => handleSelfEnroll(c.id)}
+                            disabled={alreadyEnrolled || isMyClass}
+                            className={`rounded-xl text-xs font-semibold h-9 px-4 cursor-pointer shadow-soft ${
+                              alreadyEnrolled || isMyClass
+                                ? "bg-slate-100 text-slate-400 hover:bg-slate-100 cursor-not-allowed shadow-none"
+                                : "bg-primary hover:bg-primary/95 text-white"
+                            }`}
+                          >
+                            {alreadyEnrolled || isMyClass ? "Já Matriculado" : "Inscrever-se"}
+                          </Button>
+                        </div>
+                      </Card>
+                    );
+                  })}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="bg-white p-6 rounded-xl shadow-soft text-center text-slate-400 text-xs font-semibold">
+            Nenhum perfil de aluno encontrado para a conta atual.
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 relative min-h-[calc(100vh-10rem)]">
-      {/* Header and Action */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
             <Users className="h-5.5 w-5.5 text-primary" />
-            Alunos
+            Alunos e Visitantes
           </h3>
-          <p className="text-xs text-slate-500 font-medium">Controle de matrículas de alunos e visitantes.</p>
+          <p className="text-xs text-slate-500 font-medium">
+            Controle de participantes da EBD.
+          </p>
         </div>
         {canManageStudent() && (
           <Button
@@ -546,7 +820,6 @@ function AlunosPage() {
         )}
       </div>
 
-      {/* Search and Filters Bar */}
       <div className="space-y-3 bg-white p-4 rounded-2xl shadow-soft border border-slate-50">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -555,7 +828,7 @@ function AlunosPage() {
               type="text"
               placeholder="Pesquisar por nome, email ou telefone..."
               value={searchText}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+              onChange={(e) => {
                 setSearchText(e.target.value);
                 setCurrentPage(1);
               }}
@@ -577,53 +850,38 @@ function AlunosPage() {
         {showFilters && (
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-3 border-t border-slate-50 animate-fade-in">
             <div className="space-y-1">
-              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Função</Label>
-              <select
-                value={filterRole}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                  setFilterRole(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-9 font-medium text-slate-700 focus:outline-none"
-              >
-                <option value="all">Todas as Funções</option>
-                {ROLES_OPTIONS.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</Label>
+              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Situação
+              </Label>
               <select
                 value={filterStatus}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                onChange={(e) => {
                   setFilterStatus(e.target.value);
                   setCurrentPage(1);
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-9 font-medium text-slate-700 focus:outline-none"
               >
-                <option value="all">Todos os Status</option>
-                <option value="ATIVO">Ativo</option>
-                <option value="VISITANTE">Visitante</option>
-                <option value="INATIVO">Inativo</option>
+                <option value="all">Todos</option>
+                <option value="ATIVO">Ativos</option>
+                <option value="VISITANTE">Visitantes</option>
+                <option value="INATIVO">Inativos</option>
               </select>
             </div>
 
             <div className="space-y-1">
-              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Classe</Label>
+              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Classe
+              </Label>
               <select
                 value={filterClass}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                onChange={(e) => {
                   setFilterClass(e.target.value);
                   setCurrentPage(1);
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-9 font-medium text-slate-700 focus:outline-none"
               >
-                <option value="all">Todas as Classes</option>
-                {store.classes.map((c: Classe) => (
+                <option value="all">Todas</option>
+                {store.classes.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.nome}
                   </option>
@@ -632,10 +890,30 @@ function AlunosPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sexo</Label>
+              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Função
+              </Label>
+              <select
+                value={filterRole}
+                onChange={(e) => {
+                  setFilterRole(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-9 font-medium text-slate-700 focus:outline-none"
+              >
+                <option value="all">Todas</option>
+                <option value="Aluno">Aluno</option>
+                <option value="Visitante">Visitante</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Sexo
+              </Label>
               <select
                 value={filterSex}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                onChange={(e) => {
                   setFilterSex(e.target.value);
                   setCurrentPage(1);
                 }}
@@ -647,29 +925,32 @@ function AlunosPage() {
               </select>
             </div>
 
-            <div className="space-y-1 col-span-2 md:col-span-1">
-              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Faixa Etária</Label>
+            <div className="space-y-1">
+              <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Faixa Etária
+              </Label>
               <select
                 value={filterAgeGroup}
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                onChange={(e) => {
                   setFilterAgeGroup(e.target.value);
                   setCurrentPage(1);
                 }}
                 className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-9 font-medium text-slate-700 focus:outline-none"
               >
                 <option value="all">Todas</option>
-                <option value="Infantil">Infantil (Menor de 12)</option>
-                <option value="Juvenil/Jovem">Juvenil/Jovem (12 a 25)</option>
-                <option value="Adulto">Adulto (Maior de 25)</option>
+                <option value="Infantil">Infantil</option>
+                <option value="Juvenil/Jovem">Juvenil/Jovem</option>
+                <option value="Adulto">Adulto</option>
               </select>
             </div>
           </div>
         )}
       </div>
 
-      {/* Sorting bar (desktop) */}
       <div className="hidden md:flex items-center justify-end gap-4 text-xs font-semibold text-slate-500 bg-slate-50/50 p-2 px-4 rounded-xl border border-slate-100">
-        <span className="text-[10px] text-slate-400 uppercase tracking-wider">Ordenar por:</span>
+        <span className="text-[10px] text-slate-400 uppercase tracking-wider">
+          Ordenar por:
+        </span>
         <button
           onClick={() => toggleSort("nome")}
           className={`flex items-center gap-1 hover:text-slate-800 cursor-pointer ${
@@ -694,7 +975,7 @@ function AlunosPage() {
             sortBy === "status" ? "text-primary font-bold" : ""
           }`}
         >
-          Status
+          Situação
           <ArrowUpDown className="h-3 w-3" />
         </button>
         <button
@@ -708,28 +989,20 @@ function AlunosPage() {
         </button>
       </div>
 
-      {/* List content */}
       {sortedPessoas.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-8 bg-white rounded-2xl shadow-soft border border-slate-100 text-center py-16">
           <div className="h-14 w-14 rounded-full bg-slate-50 text-slate-400 flex items-center justify-center mb-4">
             <Users className="h-6 w-6" />
           </div>
-          <h4 className="text-sm font-bold text-slate-800">Nenhum aluno cadastrado</h4>
+          <h4 className="text-sm font-bold text-slate-800">
+            Nenhum participante cadastrado
+          </h4>
           <p className="text-xs text-slate-400 max-w-xs mt-1.5 leading-relaxed font-medium">
-            Registre alunos ou visitantes para suas classes.
+            Seus filtros não retornaram resultados ou você ainda não possui pessoas cadastradas.
           </p>
-          {canManageStudent() && (
-            <Button
-              onClick={handleOpenCreate}
-              className="mt-5 bg-primary hover:bg-primary/95 text-white text-xs font-semibold rounded-xl px-5 py-2 cursor-pointer shadow-soft"
-            >
-              Cadastrar Primeira Pessoa
-            </Button>
-          )}
         </div>
       ) : (
         <>
-          {/* Desktop Table */}
           <div className="hidden md:block bg-white rounded-2xl shadow-soft border border-slate-50 overflow-hidden">
             <table className="w-full border-collapse text-left">
               <thead>
@@ -737,40 +1010,35 @@ function AlunosPage() {
                   <th className="p-4 pl-6">Nome</th>
                   <th className="p-4">Funções</th>
                   <th className="p-4">Classe</th>
-                  <th className="p-4">Telefone</th>
+                  <th className="p-4">Contato</th>
                   <th className="p-4 text-center">Status</th>
-                  <th className="p-4">Ingresso</th>
                   <th className="p-4 pr-6 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-600">
                 {currentPessoas.map((p) => {
-                  const targetClass = store.classes.find((c: Classe) => c.id === p.classe_id);
-                  const formattedEntry = p.data_ingresso ? p.data_ingresso.split("-").reverse().join("/") : "N/D";
-
+                  const targetClass = store.classes.find((c) => c.id === p.classe_id);
                   return (
                     <tr
                       key={p.id}
+                      className="hover:bg-slate-50/50 transition-colors duration-150 cursor-pointer"
                       onClick={() => {
                         setSelectedPessoa(p);
                         setIsDetailsOpen(true);
                       }}
-                      className="hover:bg-slate-50/50 cursor-pointer transition-colors duration-150"
                     >
-                      <td className="p-4 font-bold text-slate-800">{p.nome}</td>
+                      <td className="p-4 pl-6 font-bold text-slate-800">
+                        {p.nome}
+                      </td>
                       <td className="p-4">
                         <div className="flex flex-wrap gap-1">
-                          {p.funcoes?.map((f: string) => (
+                          {p.funcoes?.map((f) => (
                             <span
                               key={f}
                               className={`text-[9px] font-bold px-1.75 py-0.5 rounded-full ${
-                                f === "Professor"
-                                  ? "bg-purple-50 text-purple-600"
-                                  : f === "Visitante"
-                                  ? "bg-blue-50 text-blue-600"
-                                  : f === "Administrador"
-                                  ? "bg-red-50 text-red-600"
-                                  : "bg-emerald-50 text-emerald-600"
+                                f === "Aluno"
+                                  ? "bg-primary-soft text-primary"
+                                  : "bg-blue-50 text-blue-600"
                               }`}
                             >
                               {f}
@@ -778,63 +1046,61 @@ function AlunosPage() {
                           ))}
                         </div>
                       </td>
-                      <td className="p-4">{targetClass ? targetClass.nome : "Sem classe"}</td>
-                      <td className="p-4">{p.telefone || "Não informado"}</td>
+                      <td className="p-4">
+                        {targetClass ? targetClass.nome : "Sem classe"}
+                      </td>
+                      <td className="p-4">
+                        <div className="text-[10px] text-slate-400">
+                          {p.email && <div>{p.email}</div>}
+                          {p.telefone && <div>{p.telefone}</div>}
+                        </div>
+                      </td>
                       <td className="p-4 text-center">
-                        <span className={`text-[9px] font-bold px-2 py-0.75 rounded-full ${getStatusColor(p.status)}`}>
+                        <span
+                          className={`text-[9px] font-bold px-2 py-0.75 rounded-full ${getStatusColor(
+                            p.status
+                          )}`}
+                        >
                           {p.status}
                         </span>
                       </td>
-                      <td className="p-4">{formattedEntry}</td>
-                      <td className="p-4 pr-6 text-right" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 cursor-pointer"
-                            >
-                              <MoreVertical className="h-4.5 w-4.5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="rounded-xl border border-slate-100 shadow-elevated">
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setSelectedPessoa(p);
-                                setIsDetailsOpen(true);
-                              }}
-                              className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                            >
-                              <Eye className="h-3.5 w-3.5 text-slate-400" />
-                              Visualizar
-                            </DropdownMenuItem>
-                            {canManageStudent(p) && (
-                              <>
-                                <DropdownMenuItem
-                                  onClick={() => handleOpenEdit(p)}
-                                  className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                                >
-                                  <Edit2 className="h-3.5 w-3.5 text-slate-400" />
-                                  Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleToggleStatus(p)}
-                                  className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                                >
-                                  <User className="h-3.5 w-3.5 text-slate-400" />
-                                  {p.status === "INATIVO" ? "Reativar" : "Inativar"}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => setDeletingPessoaId(p.id)}
-                                  className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                                  Excluir
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <td
+                        className="p-4 pr-6 text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              setSelectedPessoa(p);
+                              setIsDetailsOpen(true);
+                            }}
+                            className="h-7 w-7 text-slate-400 hover:text-slate-600 cursor-pointer"
+                          >
+                            <Eye className="h-4.5 w-4.5" />
+                          </Button>
+                          {canManageStudent(p) && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleOpenEdit(p)}
+                                className="h-7 w-7 text-slate-400 hover:text-slate-600 cursor-pointer"
+                              >
+                                <Edit2 className="h-4.5 w-4.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setDeletingPessoaId(p.id)}
+                                className="h-7 w-7 text-red-400 hover:text-red-600 hover:bg-red-50 cursor-pointer"
+                              >
+                                <Trash2 className="h-4.5 w-4.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -843,263 +1109,275 @@ function AlunosPage() {
             </table>
           </div>
 
-          {/* Mobile Card List */}
-          <div className="md:hidden grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-3 md:hidden">
             {currentPessoas.map((p) => {
-              const targetClass = store.classes.find((c: Classe) => c.id === p.classe_id);
-              const initials = p.nome
-                .split(" ")
-                .map((n: string) => n[0])
-                .slice(0, 2)
-                .join("")
-                .toUpperCase();
-
+              const targetClass = store.classes.find((c) => c.id === p.classe_id);
               return (
                 <Card
                   key={p.id}
+                  className="border-none shadow-soft bg-white rounded-2xl p-4 cursor-pointer"
                   onClick={() => {
                     setSelectedPessoa(p);
                     setIsDetailsOpen(true);
                   }}
-                  className="border-none shadow-soft bg-white rounded-2xl flex flex-col justify-between hover:shadow-elevated transition-shadow duration-200 cursor-pointer"
                 >
-                  <CardHeader className="p-4 pb-2 flex flex-row items-start justify-between space-y-0">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-10 w-10 rounded-full bg-slate-50 text-slate-600 flex items-center justify-center font-bold text-xs border border-slate-100 flex-shrink-0">
-                        {initials}
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold text-slate-800 leading-snug truncate">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-800 truncate">
                           {p.nome}
                         </h4>
-                        <p className="text-[10px] sm:text-xs font-semibold text-slate-400 truncate mt-0.5">
-                          {targetClass ? targetClass.nome : "Sem classe"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 flex-shrink-0" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-                      <span className={`text-[9px] font-bold px-2 py-0.75 rounded-full ${getStatusColor(p.status)}`}>
-                        {p.status}
-                      </span>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-50 cursor-pointer"
-                          >
-                            <MoreVertical className="h-4.5 w-4.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="rounded-xl border border-slate-100 shadow-elevated">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setSelectedPessoa(p);
-                              setIsDetailsOpen(true);
-                            }}
-                            className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                          >
-                            <Eye className="h-3.5 w-3.5 text-slate-400" />
-                            Visualizar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleOpenEdit(p)}
-                            className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                          >
-                            <Edit2 className="h-3.5 w-3.5 text-slate-400" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleToggleStatus(p)}
-                            className="text-slate-600 text-xs font-medium focus:bg-slate-50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                          >
-                            <User className="h-3.5 w-3.5 text-slate-400" />
-                            {p.status === "INATIVO" ? "Reativar" : "Inativar"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setDeletingPessoaId(p.id)}
-                            className="text-red-600 text-xs font-medium focus:bg-red-50/50 cursor-pointer py-2 rounded-lg flex items-center gap-2"
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="p-4 pt-2 flex flex-col gap-2">
-                    <div className="flex flex-wrap gap-1 mb-1">
-                      {p.funcoes?.map((f: string) => (
-                        <span key={f} className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-slate-50 text-slate-500">
-                          {f}
+                        <span
+                          className={`text-[9px] font-bold px-1.75 py-0.25 rounded-full ${getStatusColor(
+                            p.status
+                          )}`}
+                        >
+                          {p.status}
                         </span>
-                      ))}
+                      </div>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {p.funcoes?.map((f) => (
+                          <span
+                            key={f}
+                            className={`text-[9px] font-bold px-1.75 py-0.5 rounded-full ${
+                              f === "Aluno"
+                                ? "bg-primary-soft text-primary"
+                                : "bg-blue-50 text-blue-600"
+                            }`}
+                          >
+                            {f}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-2 font-semibold">
+                        Classe: {targetClass ? targetClass.nome : "Sem classe"}
+                      </p>
+                      {p.telefone && (
+                        <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                          Tel: {p.telefone}
+                        </p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-1 text-[11px] text-slate-400 font-semibold">
-                      <Phone className="h-3.5 w-3.5 text-slate-300" />
-                      <span>{p.telefone || "Não informado"}</span>
+                    <div
+                      className="flex items-center gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedPessoa(p);
+                          setIsDetailsOpen(true);
+                        }}
+                        className="h-8 w-8 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {canManageStudent(p) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-400 hover:text-slate-600 cursor-pointer"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="rounded-xl border-slate-100 text-xs font-semibold">
+                            <DropdownMenuItem
+                              onClick={() => handleOpenEdit(p)}
+                              className="flex items-center gap-2 cursor-pointer text-slate-600"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                              <span>Editar</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleToggleStatus(p)}
+                              className="flex items-center gap-2 cursor-pointer text-slate-600"
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                              <span>Reativar/Inativar</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setDeletingPessoaId(p.id)}
+                              className="flex items-center gap-2 cursor-pointer text-red-600 hover:bg-red-50 hover:text-red-600"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Excluir</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
-                  </CardContent>
+                  </div>
                 </Card>
               );
             })}
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between bg-white px-4 py-3 border border-slate-100 rounded-2xl shadow-soft">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-                className="rounded-xl border-slate-100 text-xs font-semibold cursor-pointer h-9"
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Anterior
-              </Button>
-              <span className="text-xs font-bold text-slate-500">
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">
                 Página {currentPage} de {totalPages}
               </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className="rounded-xl border-slate-100 text-xs font-semibold cursor-pointer h-9"
-              >
-                Próxima
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="h-8 w-8 rounded-xl border-slate-100 text-slate-600 disabled:opacity-40 cursor-pointer"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="h-8 w-8 rounded-xl border-slate-100 text-slate-600 disabled:opacity-40 cursor-pointer"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           )}
         </>
       )}
 
-      {/* FORM DIALOG (NEW/EDIT) */}
+      {/* FORM DIALOG */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-elevated overflow-y-auto max-h-[90vh]">
+        <DialogContent className="sm:max-w-lg rounded-2xl border-none shadow-elevated overflow-y-auto max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle className="text-sm font-bold text-slate-800 tracking-tight">
-              {editingPessoa ? "Editar Cadastro" : "Cadastrar Pessoa"}
+            <DialogTitle className="text-sm font-bold text-slate-800 tracking-tight flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              {editingPessoa ? "Editar Cadastro" : "Cadastrar Participante"}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-400 font-medium">
-              Preencha todos os campos cadastrais obrigatórios do participante.
+              Preencha os dados cadastrais do participante. * Indica campos obrigatórios.
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit} className="space-y-4 py-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="nome" className="text-xs font-semibold text-slate-600">
-                Nome Completo *
-              </Label>
-              <Input
-                id="nome"
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-                placeholder="Ex: João da Silva Santos"
-                className={`rounded-xl border-slate-200 text-xs py-5 ${errors.nome ? "border-red-400 focus-visible:ring-red-400" : ""}`}
-              />
-              {errors.nome && <p className="text-[10px] text-red-500 font-semibold">{errors.nome}</p>}
-            </div>
+          <form onSubmit={handleSubmit} className="space-y-4 py-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5 md:col-span-2">
+                <Label htmlFor="nome" className="text-xs font-semibold text-slate-600">
+                  Nome Completo *
+                </Label>
+                <Input
+                  id="nome"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  className="rounded-xl border-slate-200 text-xs py-5"
+                  required
+                />
+                {errors.nome && <p className="text-[10px] text-red-500 font-semibold">{errors.nome}</p>}
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="sexo" className="text-xs font-semibold text-slate-600">
-                  Sexo
+                  Sexo *
                 </Label>
                 <select
                   id="sexo"
                   value={sexo}
                   onChange={(e) => setSexo(e.target.value as any)}
                   className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-10 font-medium text-slate-700 focus:outline-none"
+                  required
                 >
-                  <option value="">Não Informado</option>
+                  <option value="">Selecione</option>
                   <option value="MASCULINO">Masculino</option>
                   <option value="FEMININO">Feminino</option>
                 </select>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="dataNasc" className="text-xs font-semibold text-slate-600">
+                <Label htmlFor="dataNascimento" className="text-xs font-semibold text-slate-600">
                   Data de Nascimento
                 </Label>
                 <Input
-                  id="dataNasc"
+                  id="dataNascimento"
                   type="date"
                   value={dataNascimento}
                   onChange={(e) => setDataNascimento(e.target.value)}
                   className="rounded-xl border-slate-200 text-xs py-5"
                 />
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="tel" className="text-xs font-semibold text-slate-600">
-                  Telefone / WhatsApp
+                <Label htmlFor="telefone" className="text-xs font-semibold text-slate-600">
+                  Telefone
                 </Label>
                 <Input
-                  id="tel"
+                  id="telefone"
                   value={telefone}
                   onChange={(e) => setTelefone(e.target.value)}
-                  placeholder="Ex: (11) 98888-8888"
-                  className={`rounded-xl border-slate-200 text-xs py-5 ${errors.telefone ? "border-red-400 focus-visible:ring-red-400" : ""}`}
+                  placeholder="(00) 00000-0000"
+                  className="rounded-xl border-slate-200 text-xs py-5"
                 />
                 {errors.telefone && <p className="text-[10px] text-red-500 font-semibold">{errors.telefone}</p>}
               </div>
 
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="text-xs font-semibold text-slate-600">
-                  Email
+                  E-mail
                 </Label>
                 <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="email@dominio.com"
                   className="rounded-xl border-slate-200 text-xs py-5"
                 />
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="endereco" className="text-xs font-semibold text-slate-600">
-                Endereço Residencial
-              </Label>
-              <Input
-                id="endereco"
-                value={endereco}
-                onChange={(e) => setEndereco(e.target.value)}
-                placeholder="Rua, Número, Bairro, Cidade..."
-                className="rounded-xl border-slate-200 text-xs py-5"
-              />
-            </div>
+              <div className="space-y-1.5 md:col-span-2">
+                <Label htmlFor="endereco" className="text-xs font-semibold text-slate-600">
+                  Endereço Residencial
+                </Label>
+                <Input
+                  id="endereco"
+                  value={endereco}
+                  onChange={(e) => setEndereco(e.target.value)}
+                  className="rounded-xl border-slate-200 text-xs py-5"
+                />
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="classeId" className="text-xs font-semibold text-slate-600">
-                  Classe Vinculada *
+                  Classe *
                 </Label>
                 <select
                   id="classeId"
                   value={classeId}
                   onChange={(e) => setClasseId(e.target.value)}
-                  className={`w-full rounded-xl border bg-white text-xs px-3 h-10 font-medium text-slate-700 focus:outline-none ${
-                    errors.classeId ? "border-red-400" : "border-slate-200"
-                  }`}
+                  className="w-full rounded-xl border border-slate-200 bg-white text-xs px-3 h-10 font-medium text-slate-700 focus:outline-none"
+                  required
                 >
-                  <option value="">Selecione uma Classe</option>
-                  {store.classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                    </option>
-                  ))}
+                  <option value="">Selecione uma classe</option>
+                  {store.classes
+                    .filter((c) => c.status === "ATIVA")
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                      </option>
+                    ))}
                 </select>
                 {errors.classeId && <p className="text-[10px] text-red-500 font-semibold">{errors.classeId}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="dataIngresso" className="text-xs font-semibold text-slate-600">
+                  Data de Ingresso
+                </Label>
+                <Input
+                  id="dataIngresso"
+                  type="date"
+                  value={dataIngresso}
+                  onChange={(e) => setDataIngresso(e.target.value)}
+                  className="rounded-xl border-slate-200 text-xs py-5"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -1634,7 +1912,6 @@ function AlunosPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </Dialog>
     </div>
   );
 }

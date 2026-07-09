@@ -50,13 +50,24 @@ function AppLayout() {
         if (session?.user) {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("nome, role")
+            .select("nome")
             .eq("id", session.user.id)
             .maybeSingle();
 
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", session.user.id);
+
+          const dbRole = roles && roles.length > 0 ? roles[0].role : null;
+          let mappedRole = "STUDENT";
+          if (dbRole === "ADMIN") mappedRole = "ADMIN";
+          else if (dbRole === "PROFESSOR") mappedRole = "TEACHER";
+          else if (dbRole === "ALUNO") mappedRole = "STUDENT";
+
           if (profile) {
             setUserName(profile.nome);
-            setUserRole(profile.role);
+            setUserRole(mappedRole);
           } else {
             // Fallback to session metadata
             setUserName(
@@ -64,7 +75,12 @@ function AppLayout() {
                 session.user.user_metadata?.name ||
                 "Usuário",
             );
-            setUserRole(session.user.user_metadata?.role || "ADMIN");
+            const metaRole = session.user.user_metadata?.role || "ADMIN";
+            let fallbackMappedRole = "STUDENT";
+            if (metaRole === "ADMIN") fallbackMappedRole = "ADMIN";
+            else if (metaRole === "TEACHER" || metaRole === "PROFESSOR") fallbackMappedRole = "TEACHER";
+            else fallbackMappedRole = "STUDENT";
+            setUserRole(fallbackMappedRole);
           }
         }
       } catch (e) {
@@ -109,7 +125,7 @@ function AppLayout() {
       </div>
 
       {/* RF04 — Mobile bottom navigation */}
-      <AppBottomNav />
+      <AppBottomNav userRole={userRole} />
     </div>
   );
 }

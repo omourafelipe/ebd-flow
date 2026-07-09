@@ -51,12 +51,17 @@ function AulasPage() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           setCurrentUserId(session.user.id);
-          const { data: profile } = await supabase
-            .from("profiles")
+          const { data: roles } = await supabase
+            .from("user_roles")
             .select("role")
-            .eq("id", session.user.id)
-            .maybeSingle();
-          setCurrentUserRole(profile?.role || session.user.user_metadata?.role || "STUDENT");
+            .eq("user_id", session.user.id);
+          const dbRole = roles && roles.length > 0 ? roles[0].role : null;
+          let mappedRole = "STUDENT";
+          if (dbRole === "ADMIN") mappedRole = "ADMIN";
+          else if (dbRole === "PROFESSOR") mappedRole = "TEACHER";
+          else if (dbRole === "ALUNO") mappedRole = "STUDENT";
+
+          setCurrentUserRole(mappedRole || session.user.user_metadata?.role || "STUDENT");
         }
       } else {
         // Fallback para demo
